@@ -1,74 +1,96 @@
-import { Navigate, Route, Routes } from "react-router-dom";
-import { useEffect } from "react";
-import { Toaster } from "react-hot-toast";
-
-// Pages
-import HomePage from "./pages/HomePage";
-import SignUpPage from "./pages/SignUpPage";
-import LoginPage from "./pages/LoginPage";
-import AdminPage from "./pages/AdminPage";
-import CategoryPage from "./pages/CategoryPage";
-import CartPage from "./pages/CartPage";
-import PurchaseSuccessPage from "./pages/PurchaseSuccessPage";
-import PurchaseCancelPage from "./pages/PurchaseCancelPage";
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { ErrorBoundary } from 'react-error-boundary';
 
 // Components
-import Navbar from "./components/Navbar";
-import LoadingSpinner from "./components/LoadingSpinner";
+import Navbar from './components/layout/Navbar';
+import Footer from './components/common/Footer';
+import AppRoutes from './AppRoutes';
 
-// Stores
-import { useUserStore } from "./stores/useUserStore";
-import { useCartStore } from "./stores/useCartStore";
+// Context Providers
+import { ThemeProvider } from './contexts/ThemeContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { CartProvider } from './contexts/CartContext';
 
-// Theme
-import { ThemeProvider } from "./contexts/ThemeContext";
+// Initialize API configuration
+import './utils/axiosConfig';
 
-function App() {
-	const { user, checkAuth, checkingAuth } = useUserStore();
-	const { getCartItems } = useCartStore();
-	useEffect(() => {
-		checkAuth();
-	}, [checkAuth]);
+// Error fallback component
+const ErrorFallback = ({ error, resetErrorBoundary }) => {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
+      <div className="max-w-md p-6 bg-white rounded-lg shadow-lg dark:bg-gray-800">
+        <h2 className="mb-4 text-2xl font-bold text-red-600 dark:text-red-400">
+          Something went wrong
+        </h2>
+        <pre className="p-4 mb-6 overflow-auto text-sm text-left text-gray-700 bg-gray-100 rounded-md dark:bg-gray-700 dark:text-gray-300">
+          {error.message}
+        </pre>
+        <div className="flex justify-center space-x-4">
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+          >
+            Reload Page
+          </button>
+          <button
+            onClick={() => {
+              localStorage.clear();
+              window.location.href = '/';
+            }}
+            className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+          >
+            Go to Home
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-	useEffect(() => {
-		if (!user) return;
-
-		getCartItems();
-	}, [getCartItems, user]);
-
-	if (checkingAuth) return <LoadingSpinner />;
-
-	return (
-		<div className='min-h-screen bg-gray-900 text-white relative overflow-hidden'>
-			{/* Background gradient */}
-			<div className='absolute inset-0 overflow-hidden'>
-				<div className='absolute inset-0'>
-					<div className='absolute top-0 left-1/2 -translate-x-1/2 w-full h-full bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.3)_0%,rgba(10,80,60,0.2)_45%,rgba(0,0,0,0.1)_100%)]' />
-				</div>
-			</div>
-
-			<div className='relative z-50 pt-20'>
-				<Navbar />
-				<Routes>
-					<Route path='/' element={<HomePage />} />
-					<Route path='/signup' element={!user ? <SignUpPage /> : <Navigate to='/' />} />
-					<Route path='/login' element={!user ? <LoginPage /> : <Navigate to='/' />} />
-					<Route
-						path='/secret-dashboard'
-						element={user?.role === "admin" ? <AdminPage /> : <Navigate to='/login' />}
-					/>
-					<Route path='/category/:category' element={<CategoryPage />} />
-					<Route path='/cart' element={user ? <CartPage /> : <Navigate to='/login' />} />
-					<Route
-						path='/purchase-success'
-						element={user ? <PurchaseSuccessPage /> : <Navigate to='/login' />}
-					/>
-					<Route path='/purchase-cancel' element={user ? <PurchaseCancelPage /> : <Navigate to='/login' />} />
-				</Routes>
-			</div>
-			<Toaster />
-		</div>
-	);
-}
+const App = () => {
+  return (
+    <ErrorBoundary
+      FallbackComponent={ErrorFallback}
+      onReset={() => {
+        // Reset the state of your app so the error doesn't happen again
+      }}
+      onError={(error, errorInfo) => {
+        console.error('Error caught by error boundary:', error, errorInfo);
+      }}
+    >
+      <ThemeProvider>
+        <AuthProvider>
+          <CartProvider>
+            <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
+              <Navbar />
+              <main className="flex-grow">
+                <AppRoutes />
+              </main>
+              <Footer />
+              <ToastContainer 
+                position="top-right"
+                autoClose={5000}
+                hideProgressBar={false}
+                newestOnTop
+                closeOnClick
+                rtl={false}
+                pauseOnFocusLoss
+                draggable
+                pauseOnHover
+                theme="light"
+                style={{ marginTop: '4.5rem' }} // Below navbar
+                toastStyle={{
+                  borderRadius: '0.5rem',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                }}
+              />
+            </div>
+          </CartProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
+  );
+};
 
 export default App;

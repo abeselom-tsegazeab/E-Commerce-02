@@ -3,11 +3,13 @@ import { ShoppingCart, ChevronLeft, ChevronRight, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCartStore } from "../stores/useCartStore";
 
-const FeaturedProducts = ({ featuredProducts }) => {
+const FeaturedProducts = ({ featuredProducts = [] }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [itemsPerPage, setItemsPerPage] = useState(4);
-
   const { addToCart } = useCartStore();
+
+  // Ensure featuredProducts is always an array
+  const safeProducts = Array.isArray(featuredProducts) ? featuredProducts : [];
 
   useEffect(() => {
     const handleResize = () => {
@@ -22,8 +24,16 @@ const FeaturedProducts = ({ featuredProducts }) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Don't render if there are no products
+  if (safeProducts.length === 0) {
+    return null; // or return a placeholder/message
+  }
+
   const nextSlide = () => {
-    setCurrentIndex((prevIndex) => Math.min(prevIndex + itemsPerPage, featuredProducts.length - itemsPerPage));
+    setCurrentIndex((prevIndex) => {
+      const maxIndex = Math.max(0, safeProducts.length - itemsPerPage);
+      return Math.min(prevIndex + itemsPerPage, maxIndex);
+    });
   };
 
   const prevSlide = () => {
@@ -31,7 +41,8 @@ const FeaturedProducts = ({ featuredProducts }) => {
   };
 
   const isStartDisabled = currentIndex === 0;
-  const isEndDisabled = currentIndex >= featuredProducts.length - itemsPerPage;
+  const isEndDisabled = safeProducts.length <= itemsPerPage || 
+                      currentIndex >= safeProducts.length - itemsPerPage;
 
   return (
     <section className="py-16 bg-gradient-to-br from-emerald-50 to-white">
@@ -64,7 +75,7 @@ const FeaturedProducts = ({ featuredProducts }) => {
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
             >
-              {featuredProducts?.map((product) => (
+              {(featuredProducts || []).map((product) => (
                 <motion.div 
                   key={product._id} 
                   className="w-full sm:w-1/2 lg:w-1/3 xl:w-1/4 flex-shrink-0 px-3 py-2"

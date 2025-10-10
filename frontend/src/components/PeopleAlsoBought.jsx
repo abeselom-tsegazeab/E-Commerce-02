@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import ProductCard from "./ProductCard";
 import axios from "../lib/axios";
-import toast from "react-hot-toast";
+import { toast } from 'react-toastify';
 import LoadingSpinner from "./LoadingSpinner";
 
 const PeopleAlsoBought = () => {

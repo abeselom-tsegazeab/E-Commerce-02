@@ -123,78 +123,128 @@ const getAllProducts = async (req, res) => {
 const getFeaturedProducts = async (req, res) => {
     const CACHE_KEY = 'featured_products';
     
-    try {
-        // Try to get from Redis cache first
-        let featuredProducts = await redis.get(CACHE_KEY);
-        
-        if (featuredProducts) {
-            return res.status(200).json({
-                success: true,
-                fromCache: true,
-                data: JSON.parse(featuredProducts),
-                cachedAt: new Date().toISOString()
-            });
-        }
-
-        // If not in cache, fetch from database
-        featuredProducts = await Product.find({ 
+    // Helper function to fetch from database
+    const fetchFromDatabase = async () => {
+        return await Product.find({ 
             isFeatured: true,
             isActive: true,
             stock: { $gt: 0 } // Only include in-stock items
         })
+        .select('-__v -createdAt -updatedAt') // Exclude unnecessary fields
         .sort({ updatedAt: -1 }) // Most recently updated first
         .limit(12) // Limit to 12 featured products
-        .lean();
+        .lean()
+        .exec(); // Add exec() to return a proper Promise
+    };
+    
+    // 1. Try to get from Redis cache first (if available)
+    try {
+        if (redis.isReady) {
+            const cachedData = await redis.get(CACHE_KEY);
+            
+            if (cachedData) {
+                return res.status(200).json({
+                    success: true,
+                    fromCache: true,
+                    data: JSON.parse(cachedData),
+                    cachedAt: new Date().toISOString()
+                });
+            }
+        }
+    } catch (cacheError) {
+        console.warn('Redis cache read error (proceeding to database):', cacheError);
+        // Continue to database fetch if cache read fails
+    }
 
+    // 2. Fetch from database
+    try {
+        const featuredProducts = await fetchFromDatabase();
+
+        // Handle empty results
         if (!featuredProducts || featuredProducts.length === 0) {
             // Cache empty result to prevent repeated database queries
-            await redis.setEx(CACHE_KEY, 300, JSON.stringify([])); // 5 min TTL for empty results
+            try {
+                if (redis.isReady) {
+                    await redis.setEx(CACHE_KEY, 300, JSON.stringify([])); // 5 min TTL for empty results
+                }
+            } catch (cacheError) {
+                console.warn('Failed to cache empty result:', cacheError);
+            }
             
-            return res.status(404).json({
-                success: false,
-                message: 'No featured products found',
-                data: []
+            return res.status(200).json({
+                success: true,
+                fromCache: false,
+                data: [],
+                message: 'No featured products available'
             });
         }
 
-        // Cache the result for future requests
-        await redis.setEx(
-            CACHE_KEY, 
-            CACHE_TTL.FEATURED_PRODUCTS, 
-            JSON.stringify(featuredProducts)
-        );
+        // 3. Cache the successful result (in background, don't wait for it)
+        if (redis.isReady) {
+            redis.setEx(
+                CACHE_KEY, 
+                CACHE_TTL.FEATURED_PRODUCTS, 
+                JSON.stringify(featuredProducts)
+            ).catch(err => 
+                console.warn('Background cache update failed:', err)
+            );
+        }
 
-        res.status(200).json({
+        // 4. Return successful response
+        return res.status(200).json({
             success: true,
             fromCache: false,
             data: featuredProducts,
             cachedAt: new Date().toISOString()
         });
-    } catch (error) {
-        console.error('Error in getFeaturedProducts:', error);
+
+    } catch (dbError) {
+        console.error('Database error in getFeaturedProducts:', dbError);
         
-        // In case of error, try to serve from database directly (bypass cache)
+        // 5. Try to serve from cache even if it's stale
         try {
-            const fallbackProducts = await Product.find({ isFeatured: true })
-                .limit(8)
-                .lean();
+            if (redis.isReady) {
+                const staleData = await redis.get(CACHE_KEY);
+                if (staleData) {
+                    return res.status(200).json({
+                        success: true,
+                        fromCache: true,
+                        data: JSON.parse(staleData),
+                        isStale: true,
+                        message: 'Serving possibly outdated data due to database error'
+                    });
+                }
+            }
+        } catch (staleError) {
+            console.warn('Failed to get stale data from cache:', staleError);
+        }
+        
+        // 6. Final fallback - minimal database query
+        try {
+            const minimalProducts = await Product.find({ isFeatured: true })
+                .select('_id name price image')
+                .limit(4)
+                .lean()
+                .exec();
                 
-            if (fallbackProducts && fallbackProducts.length > 0) {
+            if (minimalProducts && minimalProducts.length > 0) {
                 return res.status(200).json({
                     success: true,
                     fromCache: false,
-                    data: fallbackProducts,
-                    isFallback: true
+                    data: minimalProducts,
+                    isMinimal: true,
+                    message: 'Serving limited data due to system issues'
                 });
             }
         } catch (fallbackError) {
             console.error('Fallback query failed:', fallbackError);
         }
         
-        res.status(500).json({
+        // 7. If all else fails, return error response
+        return res.status(500).json({
             success: false,
-            message: 'Failed to fetch featured products',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: 'Unable to load featured products. Please try again later.',
+            error: process.env.NODE_ENV === 'development' ? dbError.message : undefined
         });
     }
 };

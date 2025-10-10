@@ -22,11 +22,40 @@ import User from '../models/user.model.js';
  */
 export const protectRoute = async (req, res, next) => {
     try {
-        // 1. Extract access token from cookies
-        const accessToken = req.cookies.accessToken;
+        console.log('=== protectRoute Middleware ===');
+        console.log('Request URL:', req.originalUrl);
+        console.log('Request Headers:', {
+            host: req.headers.host,
+            origin: req.headers.origin,
+            referer: req.headers.referer,
+            cookie: req.headers.cookie ? '*** Cookie present ***' : 'No cookie header',
+            authorization: req.headers.authorization ? '*** Authorization header present ***' : 'No authorization header'
+        });
+        
+        // 1. Extract access token from Authorization header or cookies
+        let accessToken;
+        
+        // Check Authorization header first
+        const authHeader = req.headers.authorization;
+        if (authHeader) {
+            // Trim and split the header to handle extra spaces
+            const parts = authHeader.trim().split(/\s+/);
+            if (parts.length >= 2 && parts[0].toLowerCase() === 'bearer') {
+                accessToken = parts[1];
+                console.log('Found access token in Authorization header');
+            }
+        }
+        // Fall back to cookies if not in header
+        else if (req.cookies && req.cookies.accessToken) {
+            accessToken = req.cookies.accessToken;
+            console.log('Found access token in cookies');
+        } else {
+            console.log('No access token found in headers or cookies');
+        }
 
         // 2. Check if token exists
         if (!accessToken) {
+            console.log('No access token found in headers or cookies');
             return res.status(401).json({ 
                 success: false,
                 message: 'Unauthorized - No access token provided' 
@@ -34,19 +63,56 @@ export const protectRoute = async (req, res, next) => {
         }
 
         try {
+            console.log('Verifying access token...');
+            
             // 3. Verify the JWT token
-            const decoded = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
+            let decoded;
+            try {
+                decoded = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
+                console.log('Token verified successfully. Decoded:', {
+                    userId: decoded.userId || decoded.id || decoded._id,
+                    iat: decoded.iat ? new Date(decoded.iat * 1000).toISOString() : null,
+                    exp: decoded.exp ? new Date(decoded.exp * 1000).toISOString() : null,
+                    now: new Date().toISOString()
+                });
+            } catch (verifyError) {
+                console.error('Token verification failed:', {
+                    name: verifyError.name,
+                    message: verifyError.message,
+                    expiredAt: verifyError.expiredAt ? new Date(verifyError.expiredAt).toISOString() : null,
+                    now: new Date().toISOString()
+                });
+                throw verifyError;
+            }
             
             // 4. Find user by ID from token, excluding password
-            const user = await User.findById(decoded.userId).select('-password');
+            // Try different possible ID fields
+            const userId = decoded.userId || decoded.id || decoded._id;
+            if (!userId) {
+                console.error('No user ID found in token');
+                return res.status(401).json({
+                    success: false,
+                    message: 'Invalid token - No user ID found'
+                });
+            }
+            
+            console.log('Looking up user with ID:', userId);
+            const user = await User.findById(userId).select('-password');
 
             // 5. Check if user exists
             if (!user) {
+                console.error('User not found in database');
                 return res.status(401).json({ 
                     success: false,
                     message: 'Unauthorized - User not found' 
                 });
             }
+            
+            console.log('User found:', {
+                id: user._id,
+                email: user.email,
+                role: user.role
+            });
 
             // 6. Attach user to request object for subsequent middleware
             req.user = user;

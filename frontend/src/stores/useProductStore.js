@@ -1,10 +1,12 @@
 import { create } from "zustand";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import axios from "../lib/axios";
 
 export const useProductStore = create((set) => ({
 	products: [],
+	featuredProducts: [],
 	loading: false,
+	error: null,
 
 	setProducts: (products) => set({ products }),
 	createProduct: async (productData) => {
@@ -70,13 +72,25 @@ export const useProductStore = create((set) => ({
 		}
 	},
 	fetchFeaturedProducts: async () => {
-		set({ loading: true });
+		set({ loading: true, error: null });
 		try {
 			const response = await axios.get("/products/featured");
-			set({ products: response.data, loading: false });
+			// Handle both response structures: response.data.data or response.data
+			const products = response.data?.data || response.data || [];
+			set({ 
+				featuredProducts: Array.isArray(products) ? products : [], 
+				loading: false 
+			});
+			return products;
 		} catch (error) {
-			set({ error: "Failed to fetch products", loading: false });
-			console.log("Error fetching featured products:", error);
+			console.error("Error fetching featured products:", error);
+			const errorMessage = error.response?.data?.message || "Failed to load featured products";
+			set({ 
+				error: errorMessage,
+				loading: false 
+			});
+			toast.error(errorMessage);
+			return [];
 		}
 	},
 }));

@@ -8,153 +8,178 @@
  * @module server
  */
 
-import express from 'express';
-import dotenv from 'dotenv';
-import cookieParser from 'cookie-parser';
-import cors from 'cors';
+// Core Node.js modules
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+import dotenv from 'dotenv';
+
+// Get directory name in ES module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables
+const envPath = path.resolve(__dirname, '..', '.env');
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.error('❌ Error loading .env file');
+  process.exit(1);
+}
+
+// Validate required environment variables
+const requiredEnvVars = ['MONGO_URI', 'SESSION_SECRET'];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  console.error('❌ Missing required environment variables');
+  process.exit(1);
+}
+
+// Third-party packages
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import cors from 'cors';
+import mongoose from 'mongoose';
 
 // Import route handlers
 import authRoutes from './routes/auth.route.js';
+import socialAuthRoutes from './routes/socialAuth.route.js';
 import productRoutes from './routes/product.route.js';
 import cartRoutes from './routes/cart.route.js';
 import couponRoutes from './routes/coupon.route.js';
 import paymentRoutes from './routes/payment.route.js';
 import analyticsRoutes from './routes/analytics.route.js';
-
-// Database connection
 import { connectDB } from './lib/db.js';
 
-// Get the current directory path in ES module
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load environment variables from .env file
-dotenv.config({ 
-  path: path.resolve(process.cwd(), '.env') 
-});
+// Import Passport configuration
+import passport from './lib/passport.js';
+import sessionMiddleware from './config/session.config.js';
 
 // Initialize Express app
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// =====================
-// Middleware Setup
-// =====================
+// Trust first proxy if behind a reverse proxy (e.g., Nginx)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
-// Enable CORS with configuration
+// CORS Configuration
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.CLIENT_URL 
-    : 'http://localhost:3000',
-  credentials: true, // Enable credentials (cookies, authorization headers)
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:5173',
+      process.env.FRONTEND_URL,
+      process.env.ADMIN_URL
+    ].filter(Boolean);
+
+    if (!origin || process.env.NODE_ENV === 'development' || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
     'X-Requested-With',
     'Accept',
-    'X-CSRF-Token'
+    'Origin',
+    'X-XSRF-TOKEN',
+    'X-Forwarded-For',
+    'X-Forwarded-Proto',
+    'X-Forwarded-Port'
   ],
-  exposedHeaders: ['Set-Cookie'],
-  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+  exposedHeaders: ['set-cookie'],
+  optionsSuccessStatus: 200
 };
 
-// Apply CORS with the specified options
+// Middleware
 app.use(cors(corsOptions));
-
-// Handle preflight requests
-app.options('*', cors(corsOptions));
-
-// Parse JSON bodies (with 10MB limit for file uploads)
 app.use(express.json({ limit: '10mb' }));
-
-// Parse cookies for JWT authentication
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Logging middleware for development
-if (process.env.NODE_ENV === 'development') {
-  app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path}`);
-    next();
-  });
-}
+// Session middleware
+app.use(sessionMiddleware);
 
-// =====================
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
 // API Routes
-// =====================
+app.use('/api/auth', authRoutes);
+app.use('/api/auth', socialAuthRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
-// Mount API routes
-app.use('/api/auth', authRoutes);        // Authentication routes
-app.use('/api/products', productRoutes); // Product management
-app.use('/api/cart', cartRoutes);        // Shopping cart operations
-app.use('/api/coupons', couponRoutes);   // Coupon management
-app.use('/api/payments', paymentRoutes); // Payment processing
-app.use('/api/analytics', analyticsRoutes); // Analytics and reporting
-
-// =====================
-// Production Configuration
-// =====================
+// Production static files
 if (process.env.NODE_ENV === 'production') {
-  // Serve static files from the React frontend app
   app.use(express.static(path.join(__dirname, '../frontend/dist')));
-  
-  // Handle React routing, return all requests to React app
   app.get('*', (req, res) => {
     res.sendFile(path.resolve(__dirname, '../frontend/dist/index.html'));
   });
 }
 
-// =====================
-// Error Handling Middleware
-// =====================
+// Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
+  console.error('Error:', err.stack);
   res.status(500).json({
     success: false,
-    error: process.env.NODE_ENV === 'development' 
-      ? err.message 
-      : 'Internal Server Error'
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error'
   });
 });
 
-// =====================
-// Start Server
-// =====================
-const server = app.listen(PORT, async () => {
-  console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-  
+// Start server function
+const startServer = async () => {
   try {
-    // Connect to MongoDB
     await connectDB();
-    console.log('✅ Connected to MongoDB');
+    const PORT = process.env.PORT || 5000;
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on port ${PORT} (${process.env.NODE_ENV || 'development'})`);
+    });
+
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use`);
+      }
+      process.exit(1);
+    });
+
+    return server;
   } catch (error) {
-    console.error('❌ Failed to connect to MongoDB:', error.message);
-    process.exit(1); // Exit if we can't connect to the database
+    console.error('Server startup failed');
+    process.exit(1);
   }
+};
+
+// Start the server
+let server;
+startServer().then(s => {
+  server = s;
+}).catch(err => {
+  console.error('❌ Failed to initialize server:', err);
+  process.exit(1);
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err);
-  // Close server & exit process
-  server.close(() => process.exit(1));
-});
+// Handle process termination
+const shutdown = () => {
+  if (server) {
+    server.close(() => process.exit(0));
+  } else {
+    process.exit(0);
+  }
+};
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  // Close server & exit process
-  server.close(() => process.exit(1));
-});
-
-// Handle SIGTERM (for Docker/Kubernetes)
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down gracefully...');
-  server.close(() => {
-    console.log('Process terminated');
-  });
-});
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 export default server;

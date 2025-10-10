@@ -1,12 +1,21 @@
 import express from 'express';
-import { 
-  login, 
-  logout, 
-  signup, 
-  refreshToken, 
-  getProfile 
+import passport from 'passport';
+import jwt from 'jsonwebtoken';
+import sessionMiddleware, { ensureSession } from '../config/session.config.js';
+import {
+  login,
+  logout,
+  register as signup,
+  refreshToken,
+  getProfile,
+  updateProfile,
+  googleAuth,
+  googleCallback,
+  googleAuthSuccess,
+  googleAuthFailure
 } from '../controllers/auth.controller.js';
 import { protectRoute } from '../middleware/auth.middleware.js';
+import { handleFileUpload } from '../middleware/upload.middleware.js';
 
 /**
  * Authentication Routes
@@ -16,6 +25,19 @@ import { protectRoute } from '../middleware/auth.middleware.js';
  */
 
 const router = express.Router();
+
+/**
+ * @route   GET /api/auth/test
+ * @desc    Test API endpoint
+ * @access  Public
+ */
+router.get('/test', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'API is working!',
+    timestamp: new Date().toISOString()
+  });
+});
 
 /**
  * @route   POST /api/auth/signup
@@ -100,23 +122,203 @@ router.post('/logout', logout);
 router.post('/refresh-token', refreshToken);
 
 /**
- * @route   GET /api/auth/profile
+ * @route   GET /api/auth/me
  * @desc    Get authenticated user's profile
  * @access  Private
- * @header  {string}  Authorization  Bearer token
  * @returns {Object}  User profile data
  * 
  * @middleware protectRoute - Verifies JWT token
  * 
  * @response {Object} 200 - User profile data
  * @response {Object} 401 - Unauthorized (missing or invalid token)
+ */
+router.get('/me', protectRoute, getProfile);
+
+/**
+ * @route   PUT /api/auth/update-profile
+ * @desc    Update user profile with optional avatar upload
+ * @access  Private
+ * @param   {string}  [name]  User's name
+ * @param   {string}  [phone]  User's phone number
+ * @param   {file}    [avatar] User's avatar image file (jpeg, png, webp)
+ * @returns {Object}  Updated user data
  * 
- * @example
- * // Request headers
- * {
- *   "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- * }
+ * @middleware protectRoute - Verifies JWT token
+ * @middleware handleFileUpload - Handles file upload
+ * 
+ * @response {Object} 200 - Profile updated successfully
+ * @response {Object} 400 - No valid fields to update or invalid file
+ * @response {Object} 401 - Unauthorized
+ * @response {Object} 500 - Server error
+ */
+router.put('/update-profile', 
+  protectRoute, 
+  handleFileUpload, 
+  updateProfile
+);
+
+/**
+ * @route   GET /api/auth/profile
+ * @desc    Get authenticated user's profile (legacy endpoint)
+ * @access  Private
+{{ ... }}
+ * @returns {Object}  User profile data
+ * 
+ * @middleware protectRoute - Verifies JWT token
+ * 
+ * @deprecated Use /me instead
+ * @response {Object} 200 - User profile data
+ * @response {Object} 401 - Unauthorized (missing or invalid token)
  */
 router.get('/profile', protectRoute, getProfile);
+
+/**
+ * @route   GET /api/auth/google
+ * @desc    Initiate Google OAuth authentication
+ * @access  Public
+ * @query   {string} [redirect_uri] - URL to redirect to after authentication
+ * @returns {void} Redirects to Google's OAuth consent screen
+ */
+router.get('/google', 
+  (req, res, next) => {
+    // Store the redirect_uri in the session
+    if (req.query.redirect_uri) {
+      req.session.redirect_uri = req.query.redirect_uri;
+    }
+    
+    // Configure the authentication options
+    const options = {
+      scope: ['profile', 'email'],
+      accessType: 'offline',
+      prompt: 'consent',
+      state: req.query.redirect_uri 
+        ? Buffer.from(JSON.stringify({ redirect_uri: req.query.redirect_uri })).toString('base64')
+        : undefined
+    };
+    
+    // Initialize the authentication
+    const authenticator = passport.authenticate('google', options);
+    authenticator(req, res, next);
+  }
+);
+
+/**
+ * @route   GET /api/auth/google/callback
+ * @desc    Google OAuth callback URL
+ * @access  Public
+ * @param   {string}  [code]  Authorization code from Google
+ * @param   {string}  [state]  State parameter for CSRF protection
+ * @returns {void}    Redirects to the frontend with tokens
+ */
+
+// Google OAuth callback route with session support
+router.get('/google/callback',
+  // Ensure session is available
+  ensureSession,
+  // Handle the OAuth callback with Passport
+  (req, res, next) => {
+    try {
+      console.log('Google OAuth callback received');
+      
+      // Parse the state parameter if it exists
+      let redirectUri = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/`;
+      if (req.query.state) {
+        try {
+          const decodedState = JSON.parse(Buffer.from(req.query.state, 'base64').toString('utf-8'));
+          if (decodedState.redirect_uri) {
+            redirectUri = decodedState.redirect_uri;
+          }
+        } catch (error) {
+          console.error('Error parsing state:', error);
+        }
+      }
+      
+      // Store the redirect URI in the session
+      req.session.redirect_uri = redirectUri;
+      
+      // Save the session before authentication
+      req.session.save(err => {
+        if (err) {
+          console.error('Error saving session:', err);
+          return res.redirect(`${redirectUri}?error=session_error`);
+        }
+        
+        // Proceed with authentication
+        passport.authenticate('google', {
+          failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=auth_failed`,
+          session: true
+        })(req, res, next);
+      });
+    } catch (error) {
+      console.error('Error in OAuth callback:', error);
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=server_error`);
+    }
+  },
+  
+  // Success handler after Passport authentication
+  (req, res) => {
+    try {
+      if (!req.user) {
+        throw new Error('No user returned from Google OAuth');
+      }
+
+      // Get the redirect URI from session or use default
+      const redirectUri = req.session?.redirect_uri || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/`;
+      
+      // Generate JWT token
+      const token = jwt.sign(
+        { 
+          userId: req.user._id, 
+          email: req.user.email,
+          name: req.user.name,
+          avatar: req.user.profilePicture || ''
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '1d' }
+      );
+
+      // Common cookie options
+      const cookieOptions = {
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000, // 1 day
+        path: '/',
+        ...(process.env.NODE_ENV === 'production' && { domain: '.yourdomain.com' })
+      };
+
+      // Set the JWT token in an HTTP-only cookie
+      res.cookie('token', token, {
+        ...cookieOptions,
+        httpOnly: true
+      });
+
+      // Set a non-httpOnly cookie for client-side access
+      res.cookie('isAuthenticated', 'true', {
+        ...cookieOptions,
+        httpOnly: false
+      });
+
+      // Store user ID in session
+      req.session.userId = req.user._id;
+      
+      // Save the session
+      req.session.save(err => {
+        if (err) {
+          console.error('Error saving session:', err);
+          return res.redirect(`${redirectUri}?error=session_error`);
+        }
+        
+        // Redirect back to the frontend with success
+        return res.redirect(redirectUri);
+      });
+    } catch (error) {
+      console.error('Error in Google OAuth success handler:', error);
+      const redirectUri = req.session?.redirect_uri || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/`;
+      const errorUrl = new URL(redirectUri);
+      errorUrl.searchParams.set('error', 'authentication_error');
+      return res.redirect(errorUrl.toString());
+    }
+  }
+);
 
 export default router;
