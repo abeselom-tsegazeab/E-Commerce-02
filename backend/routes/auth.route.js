@@ -136,30 +136,65 @@ router.get('/me', protectRoute, getProfile);
 
 /**
  * @route   PUT /api/auth/update-profile
- * @desc    Update user profile with optional avatar upload
  * @access  Private
  * @param   {string}  [name]  User's name
  * @param   {string}  [phone]  User's phone number
  * @param   {file}    [avatar] User's avatar image file (jpeg, png, webp)
  * @returns {Object}  Updated user data
- * 
+ *
  * @middleware protectRoute - Verifies JWT token
  * @middleware handleFileUpload - Handles file upload
- * 
+ *
  * @response {Object} 200 - Profile updated successfully
  * @response {Object} 400 - No valid fields to update or invalid file
  * @response {Object} 401 - Unauthorized
  * @response {Object} 500 - Server error
  */
 router.put('/update-profile', 
-  protectRoute, 
-  handleFileUpload, 
+  // Logging middleware
+  (req, res, next) => {
+    console.log('\n=== Update Profile Route ===');
+    console.log('Method:', req.method);
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('Request body keys:', Object.keys(req.body || {}));
+    console.log('Query params:', req.query);
+    next();
+  },
+  
+  // Authentication middleware
+  protectRoute,
+  
+  // Body parser middleware for JSON requests
+  express.json(),
+  
+  // File upload middleware (only for multipart/form-data)
+  (req, res, next) => {
+    const contentType = req.headers['content-type'] || '';
+    
+    if (contentType.includes('multipart/form-data')) {
+      console.log('Processing as multipart/form-data');
+      return handleFileUpload(req, res, (err) => {
+        if (err) {
+          console.error('Error in file upload middleware:', err);
+          return res.status(400).json({
+            success: false,
+            message: err.message || 'Error processing file upload'
+          });
+        }
+        next();
+      });
+    }
+    
+    console.log('Processing as JSON request');
+    next();
+  },
+  
+  // Update profile controller
   updateProfile
 );
 
 /**
  * @route   GET /api/auth/profile
- * @desc    Get authenticated user's profile (legacy endpoint)
  * @access  Private
 {{ ... }}
  * @returns {Object}  User profile data

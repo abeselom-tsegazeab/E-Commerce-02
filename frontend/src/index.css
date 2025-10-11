@@ -5,25 +5,37 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+  }
+
   html {
     font-family: 'Poppins', system-ui, sans-serif;
+    @apply h-full;
   }
   
   body {
-    @apply bg-white text-gray-900;
+    @apply bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-200;
   }
   
   h1, h2, h3, h4, h5, h6 {
-    @apply font-bold tracking-tight text-gray-900;
+    @apply font-bold tracking-tight text-gray-900 dark:text-white;
   }
   
   p {
-    @apply text-gray-700;
+    @apply text-gray-700 dark:text-gray-300;
   }
   
   /* Form elements */
   input, textarea, select {
-    @apply bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-colors duration-200;
+    @apply bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 
+           focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-colors duration-200;
   }
   
   /* Buttons */

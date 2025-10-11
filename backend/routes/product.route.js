@@ -22,7 +22,7 @@ const router = express.Router();
 
 /**
  * @route   GET /api/products
- * @desc    Get all products (Admin only)
+ * @desc    Get all products
  * @access  Private/Admin
  * @header  {string}  Authorization  Bearer token
  * @query   {number}  [page=1]       Page number for pagination

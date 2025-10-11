@@ -7,46 +7,70 @@ export const ThemeProvider = ({ children }) => {
   const [mounted, setMounted] = useState(false);
 
   // Initialize theme from localStorage or system preference
-  useEffect(() => {
+  const initializeTheme = () => {
+    // Check for saved theme preference or fall back to system preference
     const savedTheme = localStorage.getItem('theme');
     const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     
-    if (savedTheme) {
+    // Only update state if we don't have a saved preference
+    if (!savedTheme) {
+      const initialTheme = systemPrefersDark ? 'dark' : 'light';
+      setTheme(initialTheme);
+      applyTheme(initialTheme);
+    } else {
       setTheme(savedTheme);
-    } else if (systemPrefersDark) {
-      setTheme('dark');
+      applyTheme(savedTheme);
     }
     setMounted(true);
-  }, []);
-
-  // Toggle between dark and light mode
-  const toggleTheme = () => {
-    setTheme(prevTheme => {
-      const newTheme = prevTheme === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('theme', newTheme);
-      return newTheme;
-    });
   };
 
-  // Apply theme class to document element
-  useEffect(() => {
-    if (!mounted) return;
-    
-    const root = window.document.documentElement;
+  // Apply theme to the document
+  const applyTheme = (themeToApply) => {
+    const root = document.documentElement;
     
     // Remove any existing theme classes
     root.classList.remove('light', 'dark');
     
     // Add current theme class
-    root.classList.add(theme);
+    root.classList.add(themeToApply);
     
-    // For Tailwind's dark mode
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
+    // Set color scheme for form controls and system UI
+    if (themeToApply === 'dark') {
+      root.classList.add('dark');
+      root.style.colorScheme = 'dark';
     } else {
-      document.documentElement.classList.remove('dark');
+      root.classList.remove('dark');
+      root.style.colorScheme = 'light';
     }
-  }, [theme, mounted]);
+    
+    // Save to localStorage
+    localStorage.setItem('theme', themeToApply);
+  };
+
+  // Initialize theme on mount
+  useEffect(() => {
+    initializeTheme();
+    
+    // Listen for system theme changes (only if no theme preference is set)
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => {
+      if (!localStorage.getItem('theme')) {
+        const newTheme = mediaQuery.matches ? 'dark' : 'light';
+        setTheme(newTheme);
+        applyTheme(newTheme);
+      }
+    };
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  // Toggle between dark and light mode
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    applyTheme(newTheme);
+  };
 
   // Don't render the app until we've determined the theme
   if (!mounted) {

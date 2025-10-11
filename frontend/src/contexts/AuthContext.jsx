@@ -14,7 +14,8 @@ import { getCookie, setCookie, deleteCookie, isAuthenticated } from '../utils/co
 
 const AuthContext = createContext({
   user: null,
-  loading: true,
+  isAuthenticated: false,
+  isLoading: true,
   error: null,
   login: async () => {},
   logout: async () => {},
@@ -25,11 +26,14 @@ const AuthContext = createContext({
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const isMounted = useRef(true);
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Derived state for authentication status
+  const isAuthenticated = useMemo(() => !!user, [user]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -56,7 +60,7 @@ export const AuthProvider = ({ children }) => {
     
     // Don't set loading on initial check to prevent flash of loading state
     if (options.initialCheck !== true) {
-      setLoading(true);
+      setIsLoading(true);
     }
     
     try {
@@ -295,46 +299,105 @@ export const AuthProvider = ({ children }) => {
       throw error;
     } finally {
       if (isMounted.current) {
-        setLoading(false);
+        setIsLoading(false);
       }
     }
   }, []);
 
-  // Update user data
-  const updateUser = useCallback((userData) => {
-    setUser(prev => ({ ...prev, ...userData }));
-  }, []);
-
-  // Create a memoized context value to prevent unnecessary re-renders
-  const contextValue = useMemo(
-    () => ({
-      user,
-      loading,
-      error,
-      login,
-      logout,
-      register,
-      checkAuth,
-      updateUser,
-    }),
-    [user, loading, error, login, logout, register, checkAuth, updateUser]
-  );
-
-  // Check auth status on mount
+  // Check authentication status on mount and when location changes
   useEffect(() => {
     const checkAuthStatus = async () => {
-      const hasAuthCookie = document.cookie.includes('token=') || 
-                          document.cookie.includes('connect.sid');
-      
-      if (hasAuthCookie) {
-        await checkAuth();
-      } else {
-        setLoading(false);
+      try {
+        const hasAuthCookie = document.cookie.includes('token=') || 
+                            document.cookie.includes('connect.sid');
+        
+        if (hasAuthCookie) {
+          await checkAuth();
+        } else {
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+        setIsLoading(false);
       }
     };
 
     checkAuthStatus();
   }, [checkAuth]);
+
+  // Define the context value
+  const contextValue = useMemo(() => ({
+    user,
+    isAuthenticated,
+    isLoading,
+    error,
+    login: async (credentials) => {
+      try {
+        setIsLoading(true);
+        const { data } = await api.post('/auth/login', credentials);
+        
+        if (data?.user) {
+          setUser(data.user);
+          localStorage.setItem('accessToken', data.accessToken);
+          localStorage.setItem('isAuthenticated', 'true');
+          toast.success('Login successful!');
+          return data.user;
+        }
+        
+        throw new Error('Login failed: No user data received');
+      } catch (error) {
+        const errorMessage = error.response?.data?.message || 'Login failed. Please check your credentials.';
+        setError(errorMessage);
+        toast.error(errorMessage);
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    logout: async () => {
+      try {
+        await api.post('/auth/logout');
+      } catch (error) {
+        console.error('Logout error:', error);
+      } finally {
+        setUser(null);
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('isAuthenticated');
+        setError(null);
+        navigate('/');
+      }
+    },
+    register: async (userData) => {
+      try {
+        setIsLoading(true);
+        const { data } = await api.post('/auth/register', userData);
+        
+        if (data?.user) {
+          setUser(data.user);
+          localStorage.setItem('accessToken', data.accessToken);
+          localStorage.setItem('isAuthenticated', 'true');
+          toast.success('Registration successful!');
+          return data.user;
+        }
+        
+        throw new Error('Registration failed: No user data received');
+      } catch (error) {
+        const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.';
+        setError(errorMessage);
+        toast.error(errorMessage);
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    checkAuth,
+    updateUser: (userData) => {
+      setUser(prev => ({
+        ...prev,
+        ...userData
+      }));
+    }
+  }), [user, isAuthenticated, isLoading, error, checkAuth]);
 
   return (
     <AuthContext.Provider value={contextValue}>

@@ -1,4 +1,5 @@
 import { ToastContainer } from 'react-toastify';
+import { useLocation } from 'react-router-dom';
 import 'react-toastify/dist/ReactToastify.css';
 import { ErrorBoundary } from 'react-error-boundary';
 
@@ -14,6 +15,12 @@ import { CartProvider } from './contexts/CartContext';
 
 // Initialize API configuration
 import './utils/axiosConfig';
+
+// Custom hook to check if current route is an admin route
+const useIsAdminRoute = () => {
+  const location = useLocation();
+  return location.pathname.startsWith('/admin');
+};
 
 // Error fallback component
 const ErrorFallback = ({ error, resetErrorBoundary }) => {
@@ -48,6 +55,37 @@ const ErrorFallback = ({ error, resetErrorBoundary }) => {
   );
 };
 
+const AppContent = () => {
+  const isAdminRoute = useIsAdminRoute();
+
+  return (
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
+      {!isAdminRoute && <Navbar />}
+      <main className="flex-grow">
+        <AppRoutes />
+      </main>
+      {!isAdminRoute && <Footer />}
+      <ToastContainer 
+        position="top-right"
+        autoClose={5000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+        style={{ marginTop: isAdminRoute ? '0' : '4.5rem' }}
+        toastStyle={{
+          borderRadius: '0.5rem',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        }}
+      />
+    </div>
+  );
+};
+
 const App = () => {
   return (
     <ErrorBoundary
@@ -62,30 +100,7 @@ const App = () => {
       <ThemeProvider>
         <AuthProvider>
           <CartProvider>
-            <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
-              <Navbar />
-              <main className="flex-grow">
-                <AppRoutes />
-              </main>
-              <Footer />
-              <ToastContainer 
-                position="top-right"
-                autoClose={5000}
-                hideProgressBar={false}
-                newestOnTop
-                closeOnClick
-                rtl={false}
-                pauseOnFocusLoss
-                draggable
-                pauseOnHover
-                theme="light"
-                style={{ marginTop: '4.5rem' }} // Below navbar
-                toastStyle={{
-                  borderRadius: '0.5rem',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                }}
-              />
-            </div>
+            <AppContent />
           </CartProvider>
         </AuthProvider>
       </ThemeProvider>

@@ -3,13 +3,14 @@ import { AnimatePresence } from 'framer-motion';
 import { lazy, Suspense } from 'react';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import GuestRoute from './components/auth/GuestRoute';
 
 // Lazy load pages for better performance
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 const ProfilePage = lazy(() => import('./pages/Profile'));
-const AdminPage = lazy(() => import('./pages/AdminPage'));
+const AdminRoutes = lazy(() => import('./admin/routes/AdminRoutes'));
 const CategoryPage = lazy(() => import('./pages/CategoryPage'));
 const CartPage = lazy(() => import('./pages/CartPage'));
 const PurchaseSuccessPage = lazy(() => import('./pages/PurchaseSuccessPage'));
@@ -34,13 +35,29 @@ const AppRoutes = () => {
         <Routes location={location} key={location.pathname}>
           {/* Public Routes */}
           <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<RegisterPage />} />
           <Route path="/category/:category" element={<CategoryPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/faq" element={<FAQPage />} />
           <Route path="/auth/callback" element={<OAuthCallback />} />
+          
+          {/* Guest-only Routes */}
+          <Route 
+            path="/login" 
+            element={
+              <GuestRoute>
+                <LoginPage />
+              </GuestRoute>
+            } 
+          />
+          <Route 
+            path="/signup" 
+            element={
+              <GuestRoute>
+                <RegisterPage />
+              </GuestRoute>
+            } 
+          />
 
           {/* Protected Routes */}
           <Route
@@ -81,7 +98,7 @@ const AppRoutes = () => {
             path="/admin/*"
             element={
               <ProtectedRoute roles={['admin']}>
-                <AdminPage />
+                <AdminRoutes />
               </ProtectedRoute>
             }
           />

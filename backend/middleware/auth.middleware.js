@@ -24,6 +24,8 @@ export const protectRoute = async (req, res, next) => {
     try {
         console.log('=== protectRoute Middleware ===');
         console.log('Request URL:', req.originalUrl);
+        console.log('Request Method:', req.method);
+        console.log('Content-Type:', req.headers['content-type']);
         console.log('Request Headers:', {
             host: req.headers.host,
             origin: req.headers.origin,
@@ -43,11 +45,14 @@ export const protectRoute = async (req, res, next) => {
             if (parts.length >= 2 && parts[0].toLowerCase() === 'bearer') {
                 accessToken = parts[1];
                 console.log('Found access token in Authorization header');
+            } else {
+                console.log('Invalid Authorization header format. Expected: Bearer <token>');
             }
         }
         // Fall back to cookies if not in header
         else if (req.cookies && req.cookies.accessToken) {
             accessToken = req.cookies.accessToken;
+            console.log('Found access token in cookies');
             console.log('Found access token in cookies');
         } else {
             console.log('No access token found in headers or cookies');
@@ -115,7 +120,25 @@ export const protectRoute = async (req, res, next) => {
             });
 
             // 6. Attach user to request object for subsequent middleware
-            req.user = user;
+            // Convert Mongoose document to plain JavaScript object
+            const userObject = user.toObject ? user.toObject() : user;
+            
+            // Attach a clean user object to the request
+            req.user = {
+                id: userObject._id || userObject.id,
+                email: userObject.email,
+                role: userObject.role,
+                // Add any other fields you need
+                ...(userObject.name && { name: userObject.name }),
+                ...(userObject.phone && { phone: userObject.phone })
+            };
+
+            // Log the attached user for debugging
+            console.log('User attached to request:', {
+                id: req.user.id,
+                email: req.user.email,
+                role: req.user.role
+            });
 
             // 7. Proceed to the next middleware
             next();

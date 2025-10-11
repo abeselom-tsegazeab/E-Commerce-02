@@ -384,19 +384,42 @@ const refreshToken = async (req, res) => {
  */
 const getProfile = async (req, res) => {
   try {
+    console.log('Request headers:', req.headers);
+    console.log('Request user:', req.user);
+    
     // The user is already attached to req.user by the auth middleware
-    // Just return the user object (password is already excluded in the middleware)
     if (!req.user) {
-      return res.status(404).json({
+      console.log('No user found in request');
+      return res.status(401).json({
         success: false,
-        message: "User not found",
+        message: "Not authenticated",
       });
     }
 
-    // Return the user object from req.user
-    res.json({
+    // Ensure id exists before proceeding
+    if (!req.user.id) {
+      console.error('User object is missing id:', req.user);
+      return res.status(500).json({
+        success: false,
+        message: "User data is incomplete"
+      });
+    }
+
+    // Create a safe user object
+    const safeUser = {
+      id: req.user.id,  // Using req.user.id as set by the auth middleware
+      name: req.user.name || 'User',
+      email: req.user.email || '',
+      role: req.user.role || 'customer',
+      avatar: req.user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(req.user.name || 'U')}&background=10b981&color=fff`
+    };
+    
+    console.log('Formatted user response:', safeUser);
+
+    // Return the formatted user object
+    res.status(200).json({
       success: true,
-      user: req.user
+      user: safeUser
     });
   } catch (error) {
     console.error("Get profile error:", error);
@@ -408,7 +431,7 @@ const getProfile = async (req, res) => {
   }
 };
 
-import cloudinary from '../lib/cloudinary.js';
+import { uploadImage } from '../lib/cloudinary.js';
 import { unlinkSync } from 'fs';
 import path from 'path';
 
@@ -424,22 +447,31 @@ import path from 'path';
  */
 const updateProfile = async (req, res) => {
   try {
-    if (!req.user || !req.user.userId) {
+    // Debug log the incoming request
+    console.log('=== Update Profile Controller ===');
+    console.log('Request user:', req.user);
+    console.log('Request body:', req.body);
+    console.log('File:', req.file ? 'File received' : 'No file');
+
+    if (!req.user || !req.user.id) {
+      console.error('Authentication error: Missing user or user ID');
       return res.status(401).json({
         success: false,
-        message: 'Not authenticated'
+        message: 'Not authenticated',
+        code: 'AUTH_ERROR'
       });
     }
 
-    const { name, phone } = req.body;
+    const { name, phone, email } = req.body;
     const updateData = {};
     let uploadedFile = null;
 
     // Handle file upload if exists
     if (req.file) {
       try {
-        // Upload to Cloudinary using the existing utility
-        const result = await cloudinary.uploadImage(req.file.path, {
+        console.log('Uploading file to Cloudinary:', req.file.path);
+        // Upload to Cloudinary using the imported uploadImage function
+        const result = await uploadImage(req.file.path, {
           folder: 'ecommerce/avatars',
           transformation: [
             { width: 500, height: 500, crop: 'fill' },
@@ -447,6 +479,7 @@ const updateProfile = async (req, res) => {
             { fetch_format: 'auto' }
           ]
         });
+        console.log('File uploaded to Cloudinary:', result.secure_url);
         
         updateData.avatar = result.secure_url;
         uploadedFile = req.file.path;
@@ -466,6 +499,30 @@ const updateProfile = async (req, res) => {
     // Add other fields to update
     if (name) updateData.name = name;
     if (phone) updateData.phone = phone;
+    
+    // Handle email update with validation
+    if (email) {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid email address'
+        });
+      }
+      
+      // Check if email is already in use by another user
+      const existingUser = await User.findOne({ email });
+      if (existingUser && existingUser._id.toString() !== req.user.id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email is already in use by another account'
+        });
+      }
+      
+      updateData.email = email;
+      updateData.isEmailVerified = false; // Reset email verification status when email is changed
+    }
 
     if (Object.keys(updateData).length === 0) {
       // Clean up the temporary file if no other updates
@@ -479,11 +536,16 @@ const updateProfile = async (req, res) => {
     }
 
     try {
+      console.log('Updating user with ID:', req.user.id);
+      console.log('Update data:', updateData);
+      
       const user = await User.findByIdAndUpdate(
-        req.user.userId,
+        req.user.id,  // Changed from req.user.userId to req.user.id
         { $set: updateData },
         { new: true, runValidators: true }
       ).select('-password');
+      
+      console.log('Updated user:', user ? 'User found' : 'User not found');
 
       if (!user) {
         throw new Error('User not found');
@@ -1031,6 +1093,7 @@ export {
   logout,
   refreshToken,
   getProfile,
+  updateProfile,
   googleAuth,
   googleCallback,
   googleAuthSuccess,

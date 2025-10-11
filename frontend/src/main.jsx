@@ -43,20 +43,36 @@ class ErrorBoundary extends React.Component {
 
 // Get the root element
 const container = document.getElementById('root');
+const rootElement = document.documentElement;
 
 if (!container) {
   throw new Error('Failed to find the root element');
 }
 
+// Initialize theme from localStorage or system preference
+const savedTheme = localStorage.getItem('theme');
+const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+const initialTheme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+
+// Apply initial theme
+rootElement.classList.add(initialTheme);
+if (initialTheme === 'dark') {
+  rootElement.classList.add('dark');
+  rootElement.style.colorScheme = 'dark';
+} else {
+  rootElement.classList.remove('dark');
+  rootElement.style.colorScheme = 'light';
+}
+
+// Create root and render
 const root = createRoot(container);
 
-// Render the app
 root.render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </ErrorBoundary>
-  </React.StrictMode>
+  <StrictMode>
+    <BrowserRouter>
+      <ErrorBoundary>
+        <App initialTheme={initialTheme} />
+      </ErrorBoundary>
+    </BrowserRouter>
+  </StrictMode>
 );
