@@ -1,16 +1,17 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import AdminLayout from '../components/layout/AdminLayout';
 
 // Lazy load admin pages
-const Dashboard = lazy(() => import('../pages/Dashboard'));
-const Products = lazy(() => import('../pages/Products'));
-const Categories = lazy(() => import('../pages/Categories'));
-const Orders = lazy(() => import('../pages/Orders'));
-const Customers = lazy(() => import('../pages/Customers'));
-const Settings = lazy(() => import('../pages/Settings'));
+const Dashboard = lazy(() => import('../pages/Dashboard/index'));
+const Products = lazy(() => import('../pages/Products/index'));
+const Categories = lazy(() => import('../pages/Categories/index'));
+const Orders = lazy(() => import('../pages/Orders/index'));
+const Customers = lazy(() => import('../pages/Customers/index'));
+const Settings = lazy(() => import('../pages/Settings/index'));
 
+// Main AdminRoutes component that renders the layout and Outlet
 const AdminRoutes = () => {
   return (
     <AdminLayout>
@@ -21,19 +22,28 @@ const AdminRoutes = () => {
           </div>
         }
       >
-        <Routes>
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="products/*" element={<Products />} />
-          <Route path="categories/*" element={<Categories />} />
-          <Route path="orders/*" element={<Orders />} />
-          <Route path="customers/*" element={<Customers />} />
-          <Route path="settings/*" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
-        </Routes>
+        <Outlet />
       </Suspense>
     </AdminLayout>
   );
 };
+
+// Export the route configuration
+export const adminRoutes = [
+  {
+    path: '/',
+    element: <AdminRoutes />,
+    children: [
+      { index: true, element: <Navigate to="dashboard" replace /> },
+      { path: 'dashboard', element: <Dashboard /> },
+      { path: 'products/*', element: <Products /> },
+      { path: 'categories/*', element: <Categories /> },
+      { path: 'orders/*', element: <Orders /> },
+      { path: 'customers/*', element: <Customers /> },
+      { path: 'settings/*', element: <Settings /> },
+      { path: '*', element: <Navigate to="dashboard" replace /> },
+    ],
+  },
+];
 
 export default AdminRoutes;

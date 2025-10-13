@@ -1,0 +1,25 @@
+.date-range-picker {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 border border-gray-200 dark:border-gray-700;
+  min-width: 280px;
+  z-index: 50;
+}
+
+.date-range-input {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white;
+}
+
+.date-range-buttons {
+  @apply flex justify-between mt-4;
+}
+
+.date-range-button {
+  @apply px-4 py-2 text-sm font-medium rounded-md transition-colors;
+}
+
+.date-range-button-apply {
+  @apply bg-emerald-600 text-white hover:bg-emerald-700;
+}
+
+.date-range-button-cancel {
+  @apply text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700;
+}

@@ -1,4 +1,5 @@
 import { ToastContainer } from 'react-toastify';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import 'react-toastify/dist/ReactToastify.css';
 import { ErrorBoundary } from 'react-error-boundary';
@@ -9,9 +10,9 @@ import Footer from './components/common/Footer';
 import AppRoutes from './AppRoutes';
 
 // Context Providers
-import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 // Initialize API configuration
 import './utils/axiosConfig';
@@ -55,35 +56,69 @@ const ErrorFallback = ({ error, resetErrorBoundary }) => {
   );
 };
 
-const AppContent = () => {
-  const isAdminRoute = useIsAdminRoute();
+// Main app layout for non-admin routes
+const MainApp = () => (
+  <div className="flex flex-col min-h-screen bg-gray-50">
+    <Navbar />
+    <main className="flex-grow">
+      <AppRoutes />
+    </main>
+    <Footer />
+    <ToastContainer 
+      position="top-right"
+      autoClose={5000}
+      hideProgressBar={false}
+      newestOnTop
+      closeOnClick
+      rtl={false}
+      pauseOnFocusLoss
+      draggable
+      pauseOnHover
+      theme="light"
+      style={{ marginTop: '4.5rem' }}
+      toastStyle={{
+        borderRadius: '0.5rem',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+      }}
+    />
+  </div>
+);
 
+// Admin app layout with theme provider
+const AdminApp = () => {
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
-      {!isAdminRoute && <Navbar />}
-      <main className="flex-grow">
+    <ThemeProvider>
+      <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
         <AppRoutes />
-      </main>
-      {!isAdminRoute && <Footer />}
-      <ToastContainer 
-        position="top-right"
-        autoClose={5000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="light"
-        style={{ marginTop: isAdminRoute ? '0' : '4.5rem' }}
-        toastStyle={{
-          borderRadius: '0.5rem',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-        }}
-      />
-    </div>
+        <ToastContainer 
+          position="top-right"
+          autoClose={5000}
+          hideProgressBar={false}
+          newestOnTop
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          style={{ marginTop: '4.5rem' }}
+          toastStyle={{
+            borderRadius: '0.5rem',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+          }}
+        />
+      </div>
+    </ThemeProvider>
   );
+};
+
+const AppContent = () => {
+  // Ensure light mode for main app
+  useEffect(() => {
+    document.documentElement.classList.remove('dark');
+  }, []);
+
+  const isAdminRoute = useIsAdminRoute();
+  return isAdminRoute ? <AdminApp /> : <MainApp />;
 };
 
 const App = () => {
@@ -97,13 +132,11 @@ const App = () => {
         console.error('Error caught by error boundary:', error, errorInfo);
       }}
     >
-      <ThemeProvider>
-        <AuthProvider>
-          <CartProvider>
-            <AppContent />
-          </CartProvider>
-        </AuthProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <CartProvider>
+          <AppContent />
+        </CartProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 };

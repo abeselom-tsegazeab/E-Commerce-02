@@ -4,13 +4,13 @@ import { lazy, Suspense } from 'react';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import GuestRoute from './components/auth/GuestRoute';
+import { adminRoutes } from './admin/routes/AdminRoutes';
 
 // Lazy load pages for better performance
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 const ProfilePage = lazy(() => import('./pages/Profile'));
-const AdminRoutes = lazy(() => import('./admin/routes/AdminRoutes'));
 const CategoryPage = lazy(() => import('./pages/CategoryPage'));
 const CartPage = lazy(() => import('./pages/CartPage'));
 const PurchaseSuccessPage = lazy(() => import('./pages/PurchaseSuccessPage'));
@@ -97,13 +97,30 @@ const AppRoutes = () => {
           <Route
             path="/admin/*"
             element={
-              <ProtectedRoute roles={['admin']}>
-                <AdminRoutes />
+              <ProtectedRoute adminOnly>
+                <Routes>
+                  {adminRoutes.map((route, index) => (
+                    <Route
+                      key={index}
+                      path={route.path}
+                      element={route.element}
+                    >
+                      {route.children?.map((childRoute, childIndex) => (
+                        <Route
+                          key={childIndex}
+                          index={childRoute.index}
+                          path={childRoute.path}
+                          element={childRoute.element}
+                        />
+                      ))}
+                    </Route>
+                  ))}
+                </Routes>
               </ProtectedRoute>
             }
           />
 
-          {/* 404 - Keep this at the bottom */}
+          {/* 404 - Keep this as the last route */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

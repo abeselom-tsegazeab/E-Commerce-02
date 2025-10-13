@@ -6,7 +6,9 @@ import {
   Menu, 
   X,
   Home,
-  LogOut
+  LogOut,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCartStore } from '../../stores/useCartStore';
@@ -97,8 +99,8 @@ const Navbar = () => {
         transition={{ duration: 0.3 }}
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
           scrolled 
-            ? 'bg-white/95 backdrop-blur-md shadow-md py-2' 
-            : 'bg-white py-3 md:py-4'
+            ? 'bg-white/80 backdrop-blur-sm shadow-sm py-2' 
+            : 'bg-transparent py-4'
         }`}
       >
         <div className="container mx-auto px-4">
@@ -115,7 +117,7 @@ const Navbar = () => {
                     <path 
                       d="M5 8h15l-1.5 10h-12L5 8z" 
                       fill="none" 
-                      stroke="#10B981" 
+                      stroke={scrolled ? '#10B981' : '#FFFFFF'} 
                       strokeWidth="1.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -123,27 +125,28 @@ const Navbar = () => {
                     <path 
                       d="M8 8V6a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v2" 
                       fill="none" 
-                      stroke="#10B981" 
+                      stroke={scrolled ? '#10B981' : '#FFFFFF'}
                       strokeWidth="1.5"
                       strokeLinecap="round"
                     />
-                    <circle cx="9" cy="19" r="1.5" fill="#10B981" fillOpacity="0.2" stroke="#10B981" strokeWidth="1" />
-                    <circle cx="16" cy="19" r="1.5" fill="#10B981" fillOpacity="0.2" stroke="#10B981" strokeWidth="1" />
-                    <circle cx="9" cy="19" r="0.5" fill="#10B981" />
-                    <circle cx="16" cy="19" r="0.5" fill="#10B981" />
+                    <circle cx="9" cy="19" r="1.5" fill={scrolled ? '#10B981' : '#FFFFFF'} fillOpacity="0.2" stroke={scrolled ? '#10B981' : '#FFFFFF'} strokeWidth="1" />
+                    <circle cx="16" cy="19" r="1.5" fill={scrolled ? '#10B981' : '#FFFFFF'} fillOpacity="0.2" stroke={scrolled ? '#10B981' : '#FFFFFF'} strokeWidth="1" />
+                    <circle cx="9" cy="19" r="0.5" fill={scrolled ? '#10B981' : '#FFFFFF'} />
+                    <circle cx="16" cy="19" r="0.5" fill={scrolled ? '#10B981' : '#FFFFFF'} />
                   </svg>
                 </motion.div>
                 <motion.span 
-                  className="text-lg md:text-xl font-bold text-gray-800"
-                  whileHover={{ scale: 1.02 }}
+                  className={`text-xl font-bold ${
+                    scrolled ? 'text-gray-800' : 'text-white'
+                  }`}
                 >
-                  Quantum<span className="font-light">Shop</span>
+                  QuantumShop
                 </motion.span>
               </Link>
             </div>
 
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-1 mx-4">
+            {/* Center - Navigation Links (Desktop) */}
+            <nav className="hidden md:flex items-center space-x-1">
               {navLinks.map((link) => (
                 <Link
                   key={link.path}
@@ -151,7 +154,9 @@ const Navbar = () => {
                   className={`px-3 py-2 text-sm font-medium transition-colors duration-200 whitespace-nowrap ${
                     location.pathname === link.path
                       ? 'text-emerald-500'
-                      : 'text-gray-700 hover:text-emerald-500'
+                      : scrolled 
+                        ? 'text-gray-700 hover:text-emerald-500' 
+                        : 'text-white/90 hover:text-white'
                   }`}
                 >
                   {link.name}
@@ -164,10 +169,14 @@ const Navbar = () => {
               {/* Cart */}
               <Link
                 to="/cart"
-                className="p-2 rounded-full hover:bg-gray-100 relative"
+                className={`p-2 rounded-full relative ${
+                  scrolled 
+                    ? 'hover:bg-gray-100 text-gray-700' 
+                    : 'hover:bg-white/20 text-white'
+                }`}
                 aria-label="Shopping Cart"
               >
-                <ShoppingCart className="w-5 h-5 text-gray-700" />
+                <ShoppingCart className="w-5 h-5" />
                 {cart.length > 0 && (
                   <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                     {Math.min(cart.length, 99)}
