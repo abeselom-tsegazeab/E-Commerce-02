@@ -4,12 +4,14 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import AdminLayout from '../components/layout/AdminLayout';
 
 // Lazy load admin pages
-const Dashboard = lazy(() => import('../pages/Dashboard/index'));
-const Products = lazy(() => import('../pages/Products/index'));
-const Categories = lazy(() => import('../pages/Categories/index'));
-const Orders = lazy(() => import('../pages/Orders/index'));
-const Customers = lazy(() => import('../pages/Customers/index'));
-const Settings = lazy(() => import('../pages/Settings/index'));
+const Dashboard = lazy(() => import('../pages/Dashboard'));
+const Products = lazy(() => import('../pages/Products'));
+const ProductFormPage = lazy(() => import('../pages/Products/ProductFormPage'));
+const Categories = lazy(() => import('../pages/Categories'));
+const CreateCategory = lazy(() => import('../pages/Categories/CreateCategory'))
+const Orders = lazy(() => import('../pages/Orders'));
+const Customers = lazy(() => import('../pages/Customers'));
+const Settings = lazy(() => import('../pages/Settings'));
 
 // Main AdminRoutes component that renders the layout and Outlet
 const AdminRoutes = () => {
@@ -36,8 +38,12 @@ export const adminRoutes = [
     children: [
       { index: true, element: <Navigate to="dashboard" replace /> },
       { path: 'dashboard', element: <Dashboard /> },
-      { path: 'products/*', element: <Products /> },
-      { path: 'categories/*', element: <Categories /> },
+      { path: 'products', element: <Products /> },
+      { path: 'products/new', element: <ProductFormPage /> },
+      { path: 'products/edit/:id', element: <ProductFormPage /> },
+      { path: 'categories', element: <Categories /> },
+      { path: 'categories/new', element: <CreateCategory /> },
+      { path: 'categories/edit/:id', element: <CreateCategory /> },
       { path: 'orders/*', element: <Orders /> },
       { path: 'customers/*', element: <Customers /> },
       { path: 'settings/*', element: <Settings /> },
