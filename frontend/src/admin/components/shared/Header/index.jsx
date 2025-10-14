@@ -3,7 +3,7 @@ import { FiSearch, FiBell, FiUser, FiSettings, FiLogOut, FiSun, FiMoon, FiMenu, 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../../../contexts/ThemeContext';
 
-const Header = ({ isSidebarOpen, toggleSidebar, onThemeToggle }) => {
+const Header = ({ isSidebarOpen, onToggleSidebar, onThemeToggle }) => {
   const { theme } = useTheme();
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -41,13 +41,13 @@ const Header = ({ isSidebarOpen, toggleSidebar, onThemeToggle }) => {
       <div className="flex items-center justify-between p-4">
         {/* Left side - Menu button and search */}
         <div className="flex items-center flex-1">
-          <button
-            onClick={toggleSidebar}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-300 mr-2 md:hidden"
-            aria-label="Toggle sidebar"
-          >
-            {isSidebarOpen ? <FiX className="h-5 w-5" /> : <FiMenu className="h-5 w-5" />}
-          </button>
+         <button
+  onClick={onToggleSidebar}  // Ensure this is using the prop
+  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-300 mr-2 md:hidden"
+  aria-label="Toggle sidebar"
+>
+  {isSidebarOpen ? <FiX className="h-5 w-5" /> : <FiMenu className="h-5 w-5" />}
+</button>
 
           <div className={`relative ml-2 md:ml-4 ${isSearchFocused ? 'flex-1 max-w-2xl' : 'w-64'}`}>
             <div className="relative">
@@ -56,7 +56,7 @@ const Header = ({ isSidebarOpen, toggleSidebar, onThemeToggle }) => {
               </div>
               <input
                 type="text"
-                className={`block w-full pl-10 pr-3 py-2 border border-transparent rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 ${isSearchFocused ? 'bg-white dark:bg-gray-800 shadow-md' : ''}`}
+                className={`block w-full pl-10  py-2 border border-transparent rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 ${isSearchFocused ? 'bg-white dark:bg-gray-800 shadow-md' : ''}`}
                 placeholder="Search..."
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}

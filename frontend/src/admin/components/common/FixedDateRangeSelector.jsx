@@ -49,9 +49,26 @@ const FixedDateRangeSelector = ({ onDateRangeChange, defaultRange = 'Last 30 day
   const [showCustomRange, setShowCustomRange] = useState(false);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
+  const [daysCount, setDaysCount] = useState(0);
   const [error, setError] = useState('');
   const dropdownRef = useRef(null);
   const [mounted, setMounted] = useState(false);
+
+  // Calculate days between two dates
+  const calculateDaysBetween = (start, end) => {
+    if (!start || !end) return 0;
+    const diffTime = Math.abs(end - start);
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end dates
+  };
+
+  // Update days count when dates change
+  useEffect(() => {
+    if (startDate && endDate) {
+      setDaysCount(calculateDaysBetween(startDate, endDate));
+    } else {
+      setDaysCount(0);
+    }
+  }, [startDate, endDate]);
   
   // Create portal container for the date picker
   const portalContainer = useMemo(() => {
@@ -182,10 +199,13 @@ const FixedDateRangeSelector = ({ onDateRangeChange, defaultRange = 'Last 30 day
   useEffect(() => {
     // Create a portal container for the date picker
     const portal = document.createElement('div');
+    portal.id = 'datepicker-root';
     portal.style.position = 'fixed';
     portal.style.top = '0';
     portal.style.left = '0';
-    portal.style.zIndex = '99999'; // Ensure it's above everything
+    portal.style.width = '100%';
+    portal.style.height = '0';
+    portal.style.zIndex = '9999';
     document.body.appendChild(portal);
     setPortalElement(portal);
 
@@ -197,6 +217,13 @@ const FixedDateRangeSelector = ({ onDateRangeChange, defaultRange = 'Last 30 day
         border: 1px solid #e2e8f0;
         border-radius: 0.5rem;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        z-index: 10000 !important;
+      }
+      .react-datepicker-popper {
+        z-index: 10000 !important;
+      }
+      .react-datepicker-popper[data-placement^=bottom] {
+        padding-top: 8px;
       }
       .react-datepicker__header {
         background-color: white;
@@ -205,7 +232,10 @@ const FixedDateRangeSelector = ({ onDateRangeChange, defaultRange = 'Last 30 day
         border-top-right-radius: 0.5rem;
       }
       .react-datepicker-popper {
-        z-index: 99999 !important;
+        z-index: 10000 !important;
+      }
+      #datepicker-root {
+        z-index: 9999;
       }
     `;
     document.head.appendChild(style);
@@ -404,6 +434,12 @@ const FixedDateRangeSelector = ({ onDateRangeChange, defaultRange = 'Last 30 day
                     </div>
                   </div>
                 </div>
+                
+                {startDate && endDate && (
+                  <div className="text-sm text-gray-600 dark:text-gray-300 mt-2 text-center">
+                    {daysCount} {daysCount === 1 ? 'day' : 'days'} selected
+                  </div>
+                )}
                 
                 {error && (
                   <div className="text-sm text-red-600 mt-1">
