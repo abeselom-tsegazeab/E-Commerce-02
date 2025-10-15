@@ -2,6 +2,9 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import AdminLayout from '../components/layout/AdminLayout';
+// Add these routes to your existing routes
+
+
 
 // Lazy load admin pages
 const Dashboard = lazy(() => import('../pages/Dashboard'));
@@ -10,8 +13,10 @@ const ProductFormPage = lazy(() => import('../pages/Products/ProductFormPage'));
 const Categories = lazy(() => import('../pages/Categories'));
 const CreateCategory = lazy(() => import('../pages/Categories/CreateCategory'))
 const Orders = lazy(() => import('../pages/Orders'));
+const NewOrder = lazy(() => import('../pages/Orders/NewOrder'));
 const Customers = lazy(() => import('../pages/Customers'));
 const Settings = lazy(() => import('../pages/Settings'));
+
 
 // Main AdminRoutes component that renders the layout and Outlet
 const AdminRoutes = () => {
@@ -45,6 +50,7 @@ export const adminRoutes = [
       { path: 'categories/new', element: <CreateCategory /> },
       { path: 'categories/edit/:id', element: <CreateCategory /> },
       { path: 'orders/*', element: <Orders /> },
+      { path: 'orders/new', element: <NewOrder /> },
       { path: 'customers/*', element: <Customers /> },
       { path: 'settings/*', element: <Settings /> },
       { path: '*', element: <Navigate to="dashboard" replace /> },
