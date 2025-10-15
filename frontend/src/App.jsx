@@ -13,6 +13,7 @@ import AppRoutes from './AppRoutes';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { NotificationProvider } from './admin/contexts/NotificationContext';
 
 // Initialize API configuration
 import './utils/axiosConfig';
@@ -118,23 +119,18 @@ const AppContent = () => {
   }, []);
 
   const isAdminRoute = useIsAdminRoute();
+  
   return isAdminRoute ? <AdminApp /> : <MainApp />;
 };
 
 const App = () => {
   return (
-    <ErrorBoundary
-      FallbackComponent={ErrorFallback}
-      onReset={() => {
-        // Reset the state of your app so the error doesn't happen again
-      }}
-      onError={(error, errorInfo) => {
-        console.error('Error caught by error boundary:', error, errorInfo);
-      }}
-    >
+    <ErrorBoundary FallbackComponent={ErrorFallback}>
       <AuthProvider>
         <CartProvider>
-          <AppContent />
+          <NotificationProvider>
+            <AppContent />
+          </NotificationProvider>
         </CartProvider>
       </AuthProvider>
     </ErrorBoundary>

@@ -14,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCartStore } from '../../stores/useCartStore';
 import { toast } from 'react-toastify';
 import UserMenu from '../UserMenu';
+import NotificationBell from '../../admin/components/notifications/NotificationBell';
 
 const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -166,6 +167,13 @@ const Navbar = () => {
 
             {/* Right Side Icons */}
             <div className="flex items-center space-x-2 md:space-x-4">
+              {/* Notifications - Only show when user is logged in */}
+              {user && (
+                <div className="relative">
+                  <NotificationBell />
+                </div>
+              )}
+
               {/* Cart */}
               <Link
                 to="/cart"

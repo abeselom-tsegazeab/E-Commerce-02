@@ -17,7 +17,7 @@ const NewOrder = lazy(() => import('../pages/Orders/NewOrder'));
 const Customers = lazy(() => import('../pages/Customers'));
 const Settings = lazy(() => import('../pages/Settings'));
 const Analytics = lazy(() => import('../pages/Analytics'));
-
+const Notifications = lazy(() => import('../pages/Notifications'));
 
 // Main AdminRoutes component that renders the layout and Outlet
 const AdminRoutes = () => {
@@ -55,6 +55,7 @@ export const adminRoutes = [
       { path: 'customers/*', element: <Customers /> },
       { path: 'settings/*', element: <Settings /> },
       { path: 'analytics/*', element: <Analytics /> },
+      { path: 'notifications/*', element: <Notifications /> },
       { path: '*', element: <Navigate to="dashboard" replace /> },
     ],
   },

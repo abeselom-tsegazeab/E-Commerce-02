@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { FiSearch, FiBell, FiUser, FiSettings, FiLogOut, FiSun, FiMoon, FiMenu, FiX } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../../../contexts/ThemeContext';
-
+import NotificationBell from '../../notifications/NotificationBell';
 const Header = ({ isSidebarOpen, onToggleSidebar, onThemeToggle }) => {
   const { theme } = useTheme();
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -87,66 +87,10 @@ const Header = ({ isSidebarOpen, onToggleSidebar, onThemeToggle }) => {
             )}
           </button>
 
-          {/* Notifications */}
-          <div className="relative" ref={notificationsRef}>
-            <button
-              onClick={() => {
-                setIsNotificationsOpen(!isNotificationsOpen);
-                setHasNewNotifications(false);
-                setIsProfileOpen(false);
-              }}
-              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-300 relative"
-              aria-label="Notifications"
-            >
-              <FiBell className="h-5 w-5" />
-              {hasNewNotifications && (
-                <span className="absolute top-1 right-1 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-800"></span>
-              )}
-            </button>
-
-            <AnimatePresence>
-              {isNotificationsOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 20, scale: 0.95, transition: { duration: 0.15 } }}
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                  className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden z-50"
-                >
-                  <div className="p-3 border-b border-gray-100 dark:border-gray-700">
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-medium text-gray-800 dark:text-white">Notifications</h3>
-                      <button className="text-xs text-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400">
-                        Mark all as read
-                      </button>
-                    </div>
-                  </div>
-                  <div className="max-h-96 overflow-y-auto">
-                    {notifications.length > 0 ? (
-                      notifications.map((notification) => (
-                        <div
-                          key={notification.id}
-                          className={`p-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors ${!notification.read ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
-                        >
-                          <p className="text-sm text-gray-700 dark:text-gray-200">{notification.message}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{notification.time}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                        No new notifications
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-2 border-t border-gray-100 dark:border-gray-700 text-center">
-                    <button className="text-sm text-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400">
-                      View all notifications
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+         {/* Notifications */}
+<div className="relative">
+  <NotificationBell />
+</div>
 
           {/* User Profile */}
           <div className="relative" ref={profileRef}>
