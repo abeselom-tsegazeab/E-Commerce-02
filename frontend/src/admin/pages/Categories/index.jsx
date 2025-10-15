@@ -308,15 +308,18 @@ const Categories = () => {
                 }
               }}
             >
-              <DragAndDropCategories
-                categories={filteredCategories}
-                selectedItems={selectedItems}
-                onSelectItem={handleSelectItem}
-                onSelectAll={handleSelectAll}
-                onStatusToggle={handleStatusToggle}
-                onDelete={handleDelete}
-                onEdit={handleEdit}
-              />
+             <DragAndDropCategories
+  categories={categories}
+  onReorder={(newOrder) => {
+    // Update your state with the new order
+    setCategories(newOrder);
+  }}
+  onDelete={handleDelete}
+  onStatusToggle={handleStatusToggle}
+  onEdit={handleEdit}
+  selectedItems={selectedItems}
+  onSelectItem={handleSelectItem}
+/>
             </DndContext>
           )}
         </motion.div>

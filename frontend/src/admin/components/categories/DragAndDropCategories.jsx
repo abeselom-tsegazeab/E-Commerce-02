@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { arrayMoveImmutable } from 'array-move';
-import { useSortable } from '@dnd-kit/sortable';
+import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { FiMenu, FiTrash2, FiEdit2, FiEye, FiEyeOff } from 'react-icons/fi';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-const SortableItem = ({ id, category, onDelete, onStatusToggle, isSelected, onSelect }) => {
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+
+const SortableItem = ({ id, category, onDelete, onStatusToggle, isSelected, onSelect, onEdit }) => {
   const {
     attributes,
     listeners,
@@ -34,7 +35,7 @@ const SortableItem = ({ id, category, onDelete, onStatusToggle, isSelected, onSe
           type="button"
           {...attributes}
           {...listeners}
-          className="p-1 mr-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none"
+          className="p-1 mr-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none cursor-grab active:cursor-grabbing"
         >
           <FiMenu className="h-5 w-5" />
         </button>
@@ -42,7 +43,7 @@ const SortableItem = ({ id, category, onDelete, onStatusToggle, isSelected, onSe
         <input
           type="checkbox"
           checked={isSelected}
-          onChange={(e) => onSelect(category.id, e.target.checked)}
+          onChange={(e) => onSelect(id, e.target.checked)}
           className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 mr-3"
         />
 
@@ -79,7 +80,7 @@ const SortableItem = ({ id, category, onDelete, onStatusToggle, isSelected, onSe
         
         <button
           type="button"
-          onClick={() => onStatusToggle(category.id, category.status === 'active' ? 'inactive' : 'active')}
+          onClick={() => onStatusToggle(id, category.status === 'active' ? 'inactive' : 'active')}
           className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none"
         >
           {category.status === 'active' ? (
@@ -91,7 +92,7 @@ const SortableItem = ({ id, category, onDelete, onStatusToggle, isSelected, onSe
 
         <button
           type="button"
-          onClick={() => {}}
+          onClick={() => onEdit(id)}
           className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 focus:outline-none"
         >
           <FiEdit2 className="h-4 w-4" />
@@ -99,7 +100,7 @@ const SortableItem = ({ id, category, onDelete, onStatusToggle, isSelected, onSe
 
         <button
           type="button"
-          onClick={() => onDelete(category.id)}
+          onClick={() => onDelete(id)}
           className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 focus:outline-none"
         >
           <FiTrash2 className="h-4 w-4" />
@@ -109,17 +110,16 @@ const SortableItem = ({ id, category, onDelete, onStatusToggle, isSelected, onSe
   );
 };
 
-export const DragAndDropCategories = ({
+const DragAndDropCategories = ({
   categories = [],
   onReorder = () => {},
   onDelete = () => {},
   onStatusToggle = () => {},
+  onEdit = () => {},
   selectedItems = [],
   onSelectItem = () => {},
   onSelectAll = () => {}
 }) => {
-  const [activeId, setActiveId] = useState(null);
-  
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -128,17 +128,12 @@ export const DragAndDropCategories = ({
     })
   );
 
-  const handleDragStart = (event) => {
-    setActiveId(event.active.id);
-  };
-
   const handleDragEnd = (event) => {
     const { active, over } = event;
-    setActiveId(null);
-
+    
     if (active.id !== over?.id) {
-      const oldIndex = categories.findIndex((cat) => cat.id === active.id);
-      const newIndex = categories.findIndex((cat) => cat.id === over?.id);
+      const oldIndex = categories.findIndex(cat => cat.id === active.id);
+      const newIndex = categories.findIndex(cat => cat.id === over?.id);
       
       if (oldIndex !== -1 && newIndex !== -1) {
         const newOrder = arrayMoveImmutable(categories, oldIndex, newIndex);
@@ -159,7 +154,6 @@ export const DragAndDropCategories = ({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
       <SortableContext
@@ -174,6 +168,7 @@ export const DragAndDropCategories = ({
               category={category}
               onDelete={onDelete}
               onStatusToggle={onStatusToggle}
+              onEdit={onEdit}
               isSelected={selectedItems.includes(category.id)}
               onSelect={onSelectItem}
             />
