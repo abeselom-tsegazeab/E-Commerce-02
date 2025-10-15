@@ -30,11 +30,7 @@ const Analytics = () => {
     }, 1000);
   };
 
-  const exportReport = () => {
-    // Implement export functionality
-    console.log('Exporting report...');
-  };
-
+ 
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -59,13 +55,7 @@ const Analytics = () => {
             <FiRefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <button
-            onClick={exportReport}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            <FiDownload className="mr-2 h-4 w-4" />
-            Export
-          </button>
+        
         </div>
       </div>
 

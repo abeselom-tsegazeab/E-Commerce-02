@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Line } from 'react-chartjs-2';
-import { FiBarChart2, FiCalendar, FiDollarSign, FiTrendingUp, FiDownload } from 'react-icons/fi';
+import { FiBarChart2, FiCalendar, FiDollarSign, FiTrendingUp } from 'react-icons/fi';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -89,60 +89,6 @@ const SalesTrends = ({ dateRange, detailed = false }) => {
     ],
   };
 
- const handleExport = () => {
-  console.log('Exporting report...');
-  
-  // Get the current chart data
-  const { labels, datasets } = chartData;
-  
-  // Create CSV content
-  const headers = ['Date', 'Sales ($)'];
-  const csvRows = [headers.join(',')];
-  
-  try {
-    // Add data rows
-    labels.forEach((label, index) => {
-      if (label && label.trim() !== '') { // Only process non-empty labels
-        const value = datasets[0]?.data?.[index] ?? 0;
-        const row = [
-          `"${label}"`,
-          `"$${Number(value).toLocaleString()}"`
-        ];
-        csvRows.push(row.join(','));
-      }
-    });
-    
-    // Create CSV content
-    const csvContent = csvRows.join('\n');
-    console.log('CSV Content:', csvContent); // Debug log
-    
-    // Create blob and download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    
-    // Set the download filename with current date
-    const date = new Date();
-    const formattedDate = date.toISOString().split('T')[0];
-    const filename = `sales-trends-${formattedDate}.csv`;
-    
-    // Set up the download
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    
-    // Clean up
-    setTimeout(() => {
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }, 0);
-    
-  } catch (error) {
-    console.error('Error exporting data:', error);
-    alert('Error exporting data. Please check the console for details.');
-  }
-};
 
   const options = {
     responsive: true,
@@ -203,15 +149,7 @@ const SalesTrends = ({ dateRange, detailed = false }) => {
           </p>
         </div>
         <div className="flex items-center space-x-3">
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-            title="Export to CSV"
-          >
-            <FiDownload className="h-4 w-4 mr-2" />
-            Export
-          </button>
-          <select
+<select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
             className="text-sm border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:ring-indigo-500 focus:border-indigo-500"
