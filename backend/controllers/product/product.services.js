@@ -49,9 +49,24 @@ export const generateSKU = async (name) => {
 // Upload images to Cloudinary
 export const uploadImages = async (images = []) => {
   const uploadPromises = images.map(async (img) => {
-    if (img.startsWith('data:image')) {
+    // Handle both string URLs and object formats
+    let imageUrl;
+    let altText = '';
+
+    if (typeof img === 'string') {
+      imageUrl = img;
+    } else if (typeof img === 'object' && img !== null) {
+      imageUrl = img.url || img.src || img.imageUrl;
+      altText = img.altText || img.alt || '';
+    } else {
+      return null;
+    }
+
+    if (!imageUrl) return null;
+
+    if (typeof imageUrl === 'string' && imageUrl.startsWith('data:image')) {
       try {
-        const result = await cloudinary.uploader.upload(img, {
+        const result = await cloudinary.uploader.upload(imageUrl, {
           folder: 'ecommerce/products',
           resource_type: 'image',
           quality: 'auto:good',
@@ -60,6 +75,7 @@ export const uploadImages = async (images = []) => {
         return {
           url: result.secure_url,
           publicId: result.public_id,
+          altText: altText || 'Product image',
           width: result.width,
           height: result.height,
           format: result.format,
@@ -70,8 +86,12 @@ export const uploadImages = async (images = []) => {
         return null;
       }
     }
-    // If it's already a URL, return as is
-    return { url: img };
+    
+    // If it's already a URL, return as an object
+    return {
+      url: imageUrl,
+      altText: altText || 'Product image'
+    };
   });
 
   const results = await Promise.all(uploadPromises);
