@@ -292,23 +292,34 @@ export const getFeaturedProducts = async (req, res) => {
 // Search products
 export const searchProducts = async (req, res) => {
   try {
-    const { q, category, minPrice, maxPrice, page = 1, limit = 10 } = req.query;
+    const { 
+      q, 
+      category, 
+      minPrice, 
+      maxPrice, 
+      tags,
+      inStock,
+      page = 1, 
+      limit = 10 
+    } = req.query;
     
     const { products, total } = await searchProductsService({
       query: q,
       category,
-      minPrice: minPrice ? parseFloat(minPrice) : undefined,
-      maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
-      page: parseInt(page),
-      limit: parseInt(limit)
+      minPrice,
+      maxPrice,
+      tags: tags ? tags.split(',') : undefined,
+      inStock,
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10)
     });
     
     res.status(200).json({
       success: true,
       count: products.length,
       total,
-      page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit)),
+      page: parseInt(page, 10),
+      pages: Math.ceil(total / parseInt(limit, 10)),
       data: products
     });
     

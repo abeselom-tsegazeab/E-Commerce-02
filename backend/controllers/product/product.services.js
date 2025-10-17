@@ -124,34 +124,57 @@ const getFeaturedProductsFromDB = async (limit = 10) => {
 };
 
 // Search products with filters
-const searchProductsInDB = async ({ query, category, minPrice, maxPrice, page = 1, limit = 10 }) => {
-  const searchQuery = {};
+const searchProductsInDB = async ({ 
+  query, 
+  category, 
+  minPrice, 
+  maxPrice, 
+  tags,
+  inStock,
+  page = 1, 
+  limit = 10 
+}) => {
+  const searchQuery = { isActive: true }; // Changed from status to isActive
   
-  // Text search
+  // Text search (case-insensitive regex)
   if (query) {
-    searchQuery.$text = { $search: query };
+    searchQuery.$or = [
+      { name: { $regex: query, $options: 'i' } },
+      { description: { $regex: query, $options: 'i' } },
+      { sku: { $regex: `^${query}$`, $options: 'i' } }
+    ];
   }
   
-  // Category filter
+  // Category filter (handle ObjectId)
   if (category) {
-    searchQuery.category = category;
+    if (mongoose.Types.ObjectId.isValid(category)) {
+      searchQuery.category = new mongoose.Types.ObjectId(category);
+    }
   }
   
   // Price range
   if (minPrice !== undefined || maxPrice !== undefined) {
     searchQuery.price = {};
-    if (minPrice !== undefined) searchQuery.price.$gte = minPrice;
-    if (maxPrice !== undefined) searchQuery.price.$lte = maxPrice;
+    if (minPrice !== undefined) searchQuery.price.$gte = parseFloat(minPrice);
+    if (maxPrice !== undefined) searchQuery.price.$lte = parseFloat(maxPrice);
   }
   
-  // Only active products
-  searchQuery.status = 'active';
+  // Tags filter
+  if (tags) {
+    const tagArray = Array.isArray(tags) ? tags : [tags];
+    searchQuery.tags = { $in: tagArray.map(tag => new RegExp(tag, 'i')) };
+  }
   
+  // In stock filter
+  if (inStock === 'true') {
+    searchQuery.quantity = { $gt: 0 };
+  }
+
   const [products, total] = await Promise.all([
     Product.find(searchQuery)
       .sort('-createdAt')
       .skip((page - 1) * limit)
-      .limit(limit)
+      .limit(parseInt(limit))
       .lean(),
     Product.countDocuments(searchQuery)
   ]);
