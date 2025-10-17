@@ -487,6 +487,89 @@ export const updateProductInventory = async (req, res) => {
   }
 };
 
+// Update product variants
+export const updateProductVariants = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
+  try {
+    const { id } = req.params;
+    const { variants } = req.body;
+
+    if (!variants || !Array.isArray(variants)) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: 'Variants array is required'
+      });
+    }
+
+    // Validate variants
+    for (const variant of variants) {
+      if (!variant.sku || !variant.options || !Array.isArray(variant.options)) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          success: false,
+          message: 'Each variant must have a SKU and options array'
+        });
+      }
+    }
+
+    const product = await Product.findById(id).session(session);
+    if (!product) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Update variants
+    product.variants = variants;
+    product.hasVariants = variants.length > 0;
+    
+    // Update main product inventory based on variants
+    if (variants.length > 0) {
+      product.quantity = variants.reduce((sum, v) => sum + (v.quantity || 0), 0);
+      
+      // Set price range if needed
+      const prices = variants.map(v => v.price).filter(Boolean);
+      if (prices.length > 0) {
+        product.price = Math.min(...prices);
+        if (variants.some(v => v.comparePrice)) {
+          product.comparePrice = Math.max(...variants.map(v => v.comparePrice || 0));
+        }
+      }
+    }
+
+    await product.save({ session });
+    await session.commitTransaction();
+    session.endSession();
+    
+    // Clear cache
+    await clearProductCaches(id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Product variants updated successfully',
+      data: product
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    
+    console.error('Error updating product variants:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating product variants',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 // Get multiple products by IDs
 export const getProductsByIds = async (req, res) => {
   try {

@@ -201,13 +201,14 @@ const getRelatedProductsFromDB = async (productId, limit = 4) => {
   // Find related products (same category or tags)
   const relatedProducts = await Product.find({
     _id: { $ne: productId },
-    status: 'active',
+    isActive: true,
     $or: [
       { category: product.category },
-      { tags: { $in: product.tags } }
+      { tags: { $in: product.tags || [] } } // Add fallback for undefined tags
     ]
   })
-  .limit(limit)
+  .select('-__v -createdAt -updatedAt') // Exclude unnecessary fields
+  .limit(parseInt(limit))
   .lean();
   
   // Cache the results

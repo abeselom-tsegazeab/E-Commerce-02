@@ -12,7 +12,8 @@ import {
   getProductCounts,
   bulkUpdateProducts,
   getProductVariants,
-  getProductsByIds
+  getProductsByIds,
+  updateProductVariants
 } from '../controllers/product.controller.js';
 import { updateProductInventory } from '../controllers/product/stats.controller.js';
 import reviewRoutes from './review.routes.js';
@@ -43,6 +44,14 @@ router.get('/featured', getFeaturedProducts);
 router.get('/:id', validate(getProductValidation), getProductById);
 router.get('/:id/related', validate(validateProductId), getRelatedProducts);
 router.get('/:id/variants', validate(validateProductId), getProductVariants);
+router.patch(
+  '/:id/variants', 
+  auth, 
+  admin, 
+  validate(validateProductId), 
+  validate(validateVariantData), 
+  updateProductVariants
+);
 router.post('/batch', getProductsByIds);
 
 // Mount review routes
