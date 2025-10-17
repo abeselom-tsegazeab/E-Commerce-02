@@ -23,7 +23,7 @@ import passport from "passport";
 const generateTokens = (userId) => {
   try {
     const accessToken = jwt.sign({ userId }, process.env.ACCESS_TOKEN_SECRET, {
-      expiresIn: "15m",
+      expiresIn: "2h",
     });
 
     const refreshToken = jwt.sign(
@@ -85,10 +85,10 @@ const setAuthCookies = (res, accessToken, refreshToken) => {
     cookieOptions.domain = process.env.FRONTEND_URL?.replace('http://', '').replace('https://', '');
   }
 
-  // Access token cookie (15 minutes)
+  // Access token cookie (2 hours)
   res.cookie("accessToken", accessToken, {
     ...cookieOptions,
-    maxAge: 15 * 60 * 1000, // 15 minutes
+    maxAge: 2 * 60 * 60 * 1000, // 2 hours in milliseconds
   });
 
   // Refresh token cookie (7 days)

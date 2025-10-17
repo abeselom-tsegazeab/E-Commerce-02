@@ -45,11 +45,18 @@ import mongoose from 'mongoose';
 // Import route handlers
 import authRoutes from './routes/auth.route.js';
 import socialAuthRoutes from './routes/socialAuth.route.js';
-import productRoutes from './routes/product.route.js';
-import cartRoutes from './routes/cart.route.js';
-import couponRoutes from './routes/coupon.route.js';
-import paymentRoutes from './routes/payment.route.js';
-import analyticsRoutes from './routes/analytics.route.js';
+import productRoutes from './routes/product.routes.js';
+import cartRoutes from './routes/cart.routes.js';
+import couponRoutes from './routes/coupon.routes.js';
+import paymentRoutes from './routes/payment.routes.js';
+import analyticsRoutes from './routes/analytics.routes.js';
+import wishlistRoutes from './routes/wishlist.routes.js';
+import attributeRoutes from './routes/attribute.routes.js';
+import reviewRoutes from './routes/review.routes.js';
+import bulkRoutes from './routes/product/bulk.routes.js';
+import comparisonRoutes from './routes/product/comparison.routes.js';
+import alertRoutes from './routes/product/alert.routes.js';
+import importExportRoutes from './routes/product/importExport.routes.js';
 import { connectDB } from './lib/db.js';
 
 // Import Passport configuration
@@ -120,6 +127,15 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/wishlist', wishlistRoutes);
+app.use('/api/attributes', attributeRoutes);
+app.use('/api/reviews', reviewRoutes);
+
+// Product related routes
+app.use('/api/products', bulkRoutes);
+app.use('/api/products', comparisonRoutes);
+app.use('/api/products', alertRoutes);
+app.use('/api/products', importExportRoutes);
 
 // Production static files
 if (process.env.NODE_ENV === 'production') {
