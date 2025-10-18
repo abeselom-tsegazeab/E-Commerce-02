@@ -58,6 +58,7 @@ import comparisonRoutes from './routes/product/comparison.routes.js';
 import alertRoutes from './routes/product/alert.routes.js';
 import importExportRoutes from './routes/product/importExport.routes.js';
 import { connectDB } from './lib/db.js';
+import orderRoutes from './routes/order.routes.js';
 
 // Import Passport configuration
 import passport from './lib/passport.js';
@@ -136,6 +137,11 @@ app.use('/api/products', bulkRoutes);
 app.use('/api/products', comparisonRoutes);
 app.use('/api/products', alertRoutes);
 app.use('/api/products', importExportRoutes);
+
+
+// Mount order routes
+app.use('/api/orders', orderRoutes);
+
 
 // Production static files
 if (process.env.NODE_ENV === 'production') {

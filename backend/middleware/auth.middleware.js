@@ -195,6 +195,41 @@ export const adminRoute = (req, res, next) => {
 };
 
 /**
+ * Optional Authentication Middleware
+ * 
+ * Similar to protectRoute but doesn't block the request if no token is provided.
+ * If a valid token is provided, it attaches the user to the request.
+ * 
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+export const optionalAuth = async (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+        
+        if (authHeader) {
+            const parts = authHeader.trim().split(/\s+/);
+            if (parts.length >= 2 && parts[0].toLowerCase() === 'bearer') {
+                const token = parts[1];
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                
+                const user = await User.findById(decoded.userId).select('-password');
+                if (user) {
+                    req.user = user;
+                    console.log('User authenticated (optional):', user.email);
+                }
+            }
+        }
+        
+        next();
+    } catch (error) {
+        console.log('Optional auth error (non-fatal):', error.message);
+        next();
+    }
+};
+
+/**
  * Role-Based Access Control (RBAC) Middleware
  * 
  * Restricts access to users with specific roles
@@ -204,22 +239,27 @@ export const adminRoute = (req, res, next) => {
  */
 export const roleCheck = (allowedRoles = []) => {
     return (req, res, next) => {
+        console.log('=== roleCheck Middleware ===');
+        console.log('User role:', req.user?.role);
+        console.log('Allowed roles:', allowedRoles);
+        
         if (!req.user) {
-            return res.status(401).json({ 
+            console.log('No user found in request');
+            return res.status(401).json({
                 success: false,
-                message: 'Authentication required',
-                code: 'AUTH_REQUIRED'
+                message: 'Authentication required'
             });
         }
-
+        
         if (!allowedRoles.includes(req.user.role)) {
-            return res.status(403).json({ 
+            console.log('User role not in allowed roles');
+            return res.status(403).json({
                 success: false,
-                message: `Access denied - Requires one of these roles: ${allowedRoles.join(', ')}`,
-                code: 'INSUFFICIENT_PERMISSIONS'
+                message: 'You do not have permission to perform this action'
             });
         }
-
+        
+        console.log('Role check passed');
         next();
     };
 };
