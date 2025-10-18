@@ -31,18 +31,6 @@ router.post(
 );
 
 // Protected routes (require authentication)
-
-// Get all orders (admin only)
-router.get(
-  '/',
-  authenticate,
-  authorize,  // Only admin can list all orders
-  orderQueryValidation,
-  validateRequest,
-  getAllOrders
-);
-
-// Get current user's orders
 router.get(
   '/my-orders',
   authenticate,
@@ -69,8 +57,23 @@ router.put(
   cancelOrder
 );
 
-// Admin routes - Grouped under /admin prefix
+
+// Admin routes - Grouped under /admin/orders
 const adminRouter = express.Router();
+
+// Apply authentication and authorization to all admin routes
+adminRouter.use(authenticate);
+adminRouter.use(authorize); // Ensure only admin can access these routes
+
+// Test admin route
+adminRouter.get('/test-admin', (req, res) => {
+  console.log('Admin test route hit', { user: req.user });
+  res.status(200).json({
+    success: true,
+    message: 'Admin test route is working!',
+    user: req.user || 'No user data'
+  });
+});
 
 // Get all orders (admin only)
 adminRouter.get(
@@ -91,13 +94,12 @@ adminRouter.patch(
 
 // Get order analytics (admin only)
 adminRouter.get(
-  '/analytics/orders',
+  '/analytics',
   orderAnalyticsValidation,
   validateRequest,
   getOrderAnalytics
 );
 
-// Mount admin routes with authentication and authorization
-router.use('/admin', authenticate, authorize, adminRouter);
-
+// Mount admin routes with /api/admin/orders prefix
+router.use('/admin/orders', adminRouter);
 export default router;

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import mongoosePaginate from 'mongoose-paginate-v2';
 
 /**
  * @typedef {Object} OrderItem
@@ -98,35 +99,28 @@ const orderSchema = new mongoose.Schema(
     
     /** @type {string} Tracking number for shipping */
     trackingNumber: {
-      type: String,
-      index: true
-    },
-    
-    /** @type {string} Shipping carrier */
-    shippingCarrier: {
-      type: String,
-      enum: ['ups', 'fedex', 'usps', 'dhl', 'other'],
-      default: 'other'
-    },
-    
-    /** @type {string} Customer notes */
-    customerNotes: {
       type: String
     },
     
-    /** @type {boolean} Whether the order is a guest checkout */
+    /** @type {string} Customer notes */
+    notes: {
+      type: String
+    },
+    
+    /** @type {boolean} Whether the order is a guest order */
     isGuest: {
       type: Boolean,
       default: false
     },
     
-    /** @type {string} Guest customer email */
+    /** @type {string} Guest email (for guest orders) */
     guestEmail: {
       type: String,
       validate: {
         validator: function(v) {
-          // Only required if isGuest is true
-          return !this.isGuest || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+          // Only validate if this is a guest order
+          if (!this.isGuest) return true;
+          return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
         },
         message: props => `${props.value} is not a valid email`
       },
@@ -134,47 +128,13 @@ const orderSchema = new mongoose.Schema(
       sparse: true
     }
   },
-  { 
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+  {
+    timestamps: true
   }
 );
 
-// Indexes for better query performance
-orderSchema.index({ createdAt: -1 });
-orderSchema.index({ 'shippingAddress.city': 1 });
-orderSchema.index({ 'shippingAddress.country': 1 });
-
-/**
- * Pre-save hook to update product inventory
- */
-orderSchema.pre('save', async function(next) {
-  // Only run this hook if the status is being modified to 'cancelled' or 'refunded'
-  if (this.isModified('status') && ['cancelled', 'refunded'].includes(this.status)) {
-    // Here you would add logic to update inventory
-    // This is a placeholder for the actual implementation
-    console.log(`Order ${this._id} was ${this.status}. Update inventory here.`);
-  }
-  next();
-});
-
-/**
- * Calculate order total before saving
- */
-orderSchema.pre('save', function(next) {
-  if (this.isModified('products')) {
-    this.totalAmount = this.products.reduce((total, item) => {
-      return total + (item.price * item.quantity);
-    }, 0);
-  }
-  next();
-});
-
-// Virtual for formatted order number
-orderSchema.virtual('orderNumber').get(function() {
-  return `ORD-${this._id.toString().substr(-8).toUpperCase()}`;
-});
+// Add pagination plugin to the schema
+orderSchema.plugin(mongoosePaginate);
 
 const Order = mongoose.model("Order", orderSchema);
 

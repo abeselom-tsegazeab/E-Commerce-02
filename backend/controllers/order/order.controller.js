@@ -416,35 +416,120 @@ export const cancelOrder = async (req, res) => {
  */
 export const getAllOrders = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+    const { 
+      page = 1, 
+      limit = 10, 
+      status, 
+      sortBy = 'createdAt', 
+      sortOrder = 'desc',
+      startDate,
+      endDate
+    } = req.query;
+
+    console.log('Fetching orders with query:', { 
+      page, 
+      limit, 
+      status,
+      sortBy,
+      sortOrder,
+      startDate,
+      endDate
+    });
+
     const query = {};
 
+    // Handle status filter
     if (status) {
-      query.status = status;
+      query.status = { $regex: new RegExp(`^${status}$`, 'i') };
     }
 
+    // Handle date range filter
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        // Set to end of the day
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = endOfDay;
+      }
+    }
+
+    // Log all available statuses for debugging
+    const statuses = await Order.distinct('status');
+    console.log('Available order statuses in database:', statuses);
+
+    // Log the actual query being executed
     const options = {
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
-      sort: { createdAt: -1 },
+      sort: { [sortBy]: sortOrder === 'desc' ? -1 : 1 },
       populate: [
-        { path: 'user', select: 'name email' },
-        { path: 'products.product', select: 'name price' }
+        { 
+          path: 'user', 
+          select: 'name email' 
+        },
+        { 
+          path: 'products.product', 
+          select: 'name price' 
+        }
       ]
     };
 
+    console.log('MongoDB Query:', JSON.stringify({ query, options }, null, 2));
+
+    // Get a sample of orders within the date range (if specified)
+    const sampleQuery = {};
+    if (startDate || endDate) {
+      sampleQuery.createdAt = {};
+      if (startDate) sampleQuery.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        sampleQuery.createdAt.$lte = endOfDay;
+      }
+    }
+    
+    const sampleOrders = await Order.find(sampleQuery)
+      .limit(3)
+      .select('status createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+    console.log('Sample of orders in database:', sampleOrders);
+
+    // Execute the paginated query
     const orders = await Order.paginate(query, options);
+    
+    console.log(`Paginated query returned ${orders.docs.length} orders out of ${orders.totalDocs} total matching documents`);
+    console.log('Query conditions:', {
+      status: status || 'any',
+      dateRange: {
+        start: startDate || 'unbounded',
+        end: endDate || 'unbounded',
+        query: query.createdAt || 'no date filter'
+      },
+      totalDocs: orders.totalDocs,
+      totalPages: orders.totalPages
+    });
 
     res.status(200).json({
       success: true,
-      ...orders
+      data: orders,
+      message: 'Orders retrieved successfully'
     });
   } catch (error) {
-    console.error('Error getting all orders:', error);
+    console.error('Error in getAllOrders:', {
+      error: error.message,
+      stack: error.stack,
+      query: req.query
+    });
     res.status(500).json({
       success: false,
       message: 'Error retrieving orders',
-      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+      error: error.message,
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
     });
   }
 };

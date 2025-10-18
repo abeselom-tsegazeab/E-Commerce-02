@@ -141,6 +141,7 @@ app.use('/api/products', importExportRoutes);
 
 // Mount order routes
 app.use('/api/orders', orderRoutes);
+app.use('/api/', orderRoutes);
 
 
 // Production static files
