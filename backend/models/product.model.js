@@ -190,8 +190,11 @@ const productSchema = new mongoose.Schema(
 
 // Virtual for getting the primary image
 productSchema.virtual('primaryImage').get(function() {
-  const primary = this.images.find(img => img.isPrimary);
-  return primary ? primary.url : (this.images[0]?.url || null);
+  if (!Array.isArray(this.images) || this.images.length === 0) {
+    return null;
+  }
+  const primary = this.images.find(img => img && img.isPrimary);
+  return primary?.url || this.images[0]?.url || null;
 });
 
 // Add text index for search

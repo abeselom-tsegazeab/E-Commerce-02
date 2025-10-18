@@ -145,23 +145,45 @@ export const createOrder = async (req, res) => {
  */
 export const getOrderById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const userId = req.user?.id;  // Changed _id to id
+    const { orderId } = req.params;
+    const userId = req.user?.id;
     const isAdmin = req.user?.role === 'admin';
 
-    const order = await Order.findById(id)
-      .populate('user', 'name email')
-      .populate('products.product', 'name price');
+    console.log('Fetching order:', { orderId, userId, isAdmin });
 
-    if (!order) {
-      return res.status(404).json({
+    // Validate orderId format
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      console.log('Invalid order ID format:', orderId);
+      return res.status(400).json({
         success: false,
-        message: 'Order not found'
+        message: 'Invalid order ID format',
+        orderId
       });
     }
 
+    const order = await Order.findById(orderId)
+      .populate('user', 'name email')
+      .populate('products.product', 'name price');
+
+    console.log('Order found:', order ? 'yes' : 'no');
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found',
+        orderId // Return the ID that was searched for
+      });
+    }
+
+    // For debugging
+    console.log('Order user ID:', order.user?._id || order.user);
+    console.log('Request user ID:', userId);
+    console.log('Is admin?', isAdmin);
+
     // Check if user is authorized to view this order
-    if (!isAdmin && order.user?.id?.toString() !== userId?.toString()) {
+    const orderUserId = order.user?._id?.toString() || order.user?.toString();
+    if (!isAdmin && orderUserId !== userId?.toString()) {
+      console.log('Unauthorized access attempt:', { orderUserId, userId });
       return res.status(403).json({
         success: false,
         message: 'Not authorized to view this order'
@@ -173,11 +195,20 @@ export const getOrderById = async (req, res) => {
       data: order
     });
   } catch (error) {
-    console.error('Error getting order:', error);
+    console.error('Error in getOrderById:', {
+      error: error.message,
+      stack: error.stack,
+      params: req.params,
+      user: req.user
+    });
+    
     res.status(500).json({
       success: false,
-      message: 'Error retrieving order',
-      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+      message: 'Error retrieving order details',
+      ...(process.env.NODE_ENV === 'development' && { 
+        error: error.message,
+        stack: error.stack
+      })
     });
   }
 };
