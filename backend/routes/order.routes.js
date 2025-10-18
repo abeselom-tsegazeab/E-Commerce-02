@@ -59,15 +59,9 @@ router.get(
   getOrderById
 );
 
-router.get(
-  '/:orderId',
-  authenticate,
-  orderIdValidation,
-  validateRequest,
-  getOrderById
-);
 
-router.patch(
+
+router.put(
   '/:orderId/cancel',
   authenticate,
   orderIdValidation,

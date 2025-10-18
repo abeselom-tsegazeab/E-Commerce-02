@@ -270,7 +270,8 @@ export const getUserOrders = async (req, res) => {
  */
 export const updateOrderStatus = async (req, res) => {
   try {
-    const { id } = req.params;
+   const { orderId: id } = req.params
+   
     const { status } = req.body;
 
     const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
@@ -319,24 +320,50 @@ export const cancelOrder = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { id } = req.params;
-    const userId = req.user._id;
+    const { orderId:id } = req.params;
+    console.log('orderId:', id)
+    const userId = req.user.id;  // Changed from _id to id
 
-    const order = await Order.findOne({
-      _id: id,
-      user: userId,
-      status: { $in: ['pending', 'processing'] }
-    }).session(session);
+    console.log(`[DEBUG] Attempting to cancel order. Order ID: ${id}, User ID: ${userId}`);
 
+    // First, check if the order exists
+    console.log(`[DEBUG] Querying order with ID: ${id}`);
+    const order = await Order.findById(id).session(session);
+    
     if (!order) {
+      console.log(`[DEBUG] Order ${id} not found in the database.`);
       await session.abortTransaction();
       session.endSession();
       return res.status(404).json({
         success: false,
-        message: 'Order not found or cannot be cancelled'
+        message: 'Order not found'
       });
     }
 
+    // Check if the order belongs to the user
+    if (order.user.toString() !== userId.toString()) {
+      console.log(`[DEBUG] User ${userId} is not authorized to cancel order ${id}. Order belongs to user ${order.user}`);
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to cancel this order'
+      });
+    }
+
+    // Check if the order is in a cancellable state
+    const cancellableStatuses = ['pending', 'processing'];
+    if (!cancellableStatuses.includes(order.status)) {
+      console.log(`[DEBUG] Order ${id} cannot be cancelled because its status is ${order.status}`);
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: `Order cannot be cancelled because it is already ${order.status}`
+      });
+    }
+
+    console.log(`[DEBUG] Restoring quantities for order ${id}`);
     // Restore product quantities
     for (const item of order.products) {
       await Product.findByIdAndUpdate(
@@ -354,6 +381,7 @@ export const cancelOrder = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
+    console.log(`[DEBUG] Order ${id} cancelled successfully`);
     res.status(200).json({
       success: true,
       data: order,
@@ -363,11 +391,20 @@ export const cancelOrder = async (req, res) => {
     await session.abortTransaction();
     session.endSession();
     
-    console.error('Error cancelling order:', error);
+    console.error('[ERROR] Error in cancelOrder:', {
+      error: error.message,
+      stack: error.stack,
+      params: req.params,
+      user: req.user
+    });
+    
     res.status(500).json({
       success: false,
       message: 'Error cancelling order',
-      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+      ...(process.env.NODE_ENV === 'development' && { 
+        error: error.message,
+        stack: error.stack
+      })
     });
   }
 };
