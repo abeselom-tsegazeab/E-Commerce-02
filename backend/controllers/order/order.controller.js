@@ -1,6 +1,6 @@
-import mongoose from 'mongoose';
-import Order from '../../models/order.model.js';
-import Product from '../../models/product.model.js';
+import mongoose from "mongoose";
+import Order from "../../models/order.model.js";
+import Product from "../../models/product.model.js";
 
 /**
  * @typedef {Object} OrderItemInput
@@ -37,29 +37,40 @@ export const createOrder = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { items, shippingAddress, customerNotes, isGuest = false, guestEmail } = req.body;
-    
+    const {
+      items,
+      shippingAddress,
+      customerNotes,
+      isGuest = false,
+      guestEmail,
+    } = req.body;
+
     // Log the incoming request for debugging
-    console.log('Order request - User:', req.user ? req.user.email : 'guest', 'isGuest:', isGuest);
-    
+    console.log(
+      "Order request - User:",
+      req.user ? req.user.email : "guest",
+      "isGuest:",
+      isGuest
+    );
+
     // For guest checkout
     if (isGuest) {
       if (!guestEmail) {
         return res.status(400).json({
           success: false,
-          message: 'Guest email is required for guest checkout'
+          message: "Guest email is required for guest checkout",
         });
       }
-    } 
+    }
     // For authenticated users
     else if (!req.user) {
       return res.status(401).json({
         success: false,
-        message: 'User must be authenticated or use guest checkout'
+        message: "User must be authenticated or use guest checkout",
       });
     }
 
-    const userId = req.user?.id;  // Using req.user.id instead of _id
+    const userId = req.user?.id; // Using req.user.id instead of _id
 
     // Process order items
     const orderItems = [];
@@ -89,7 +100,7 @@ export const createOrder = async (req, res) => {
         name: product.name,
         price: product.price,
         quantity: item.quantity,
-        variant: item.variant || null
+        variant: item.variant || null,
       });
     }
 
@@ -102,11 +113,13 @@ export const createOrder = async (req, res) => {
       customerNotes,
       isGuest,
       guestEmail: isGuest ? guestEmail : undefined,
-      status: 'pending',
-      paymentStatus: 'pending',
-      stripeSessionId: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      status: "pending",
+      paymentStatus: "pending",
+      stripeSessionId: `temp_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     });
 
     await order.save({ session });
@@ -116,20 +129,20 @@ export const createOrder = async (req, res) => {
     res.status(201).json({
       success: true,
       data: order,
-      message: 'Order created successfully'
+      message: "Order created successfully",
     });
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    
-    console.error('Error creating order:', error);
-    const statusCode = error.message.includes('not found') ? 404 : 500;
+
+    console.error("Error creating order:", error);
+    const statusCode = error.message.includes("not found") ? 404 : 500;
     const response = {
       success: false,
-      message: error.message || 'Error creating order'
+      message: error.message || "Error creating order",
     };
 
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === "development") {
       response.error = error.message;
       response.stack = error.stack;
     }
@@ -147,68 +160,68 @@ export const getOrderById = async (req, res) => {
   try {
     const { orderId } = req.params;
     const userId = req.user?.id;
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = req.user?.role === "admin";
 
-    console.log('Fetching order:', { orderId, userId, isAdmin });
+    console.log("Fetching order:", { orderId, userId, isAdmin });
 
     // Validate orderId format
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      console.log('Invalid order ID format:', orderId);
+      console.log("Invalid order ID format:", orderId);
       return res.status(400).json({
         success: false,
-        message: 'Invalid order ID format',
-        orderId
+        message: "Invalid order ID format",
+        orderId,
       });
     }
 
     const order = await Order.findById(orderId)
-      .populate('user', 'name email')
-      .populate('products.product', 'name price');
+      .populate("user", "name email")
+      .populate("products.product", "name price");
 
-    console.log('Order found:', order ? 'yes' : 'no');
-    
+    console.log("Order found:", order ? "yes" : "no");
+
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found',
-        orderId // Return the ID that was searched for
+        message: "Order not found",
+        orderId, // Return the ID that was searched for
       });
     }
 
     // For debugging
-    console.log('Order user ID:', order.user?._id || order.user);
-    console.log('Request user ID:', userId);
-    console.log('Is admin?', isAdmin);
+    console.log("Order user ID:", order.user?._id || order.user);
+    console.log("Request user ID:", userId);
+    console.log("Is admin?", isAdmin);
 
     // Check if user is authorized to view this order
     const orderUserId = order.user?._id?.toString() || order.user?.toString();
     if (!isAdmin && orderUserId !== userId?.toString()) {
-      console.log('Unauthorized access attempt:', { orderUserId, userId });
+      console.log("Unauthorized access attempt:", { orderUserId, userId });
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to view this order'
+        message: "Not authorized to view this order",
       });
     }
 
     res.status(200).json({
       success: true,
-      data: order
+      data: order,
     });
   } catch (error) {
-    console.error('Error in getOrderById:', {
+    console.error("Error in getOrderById:", {
       error: error.message,
       stack: error.stack,
       params: req.params,
-      user: req.user
+      user: req.user,
     });
-    
+
     res.status(500).json({
       success: false,
-      message: 'Error retrieving order details',
-      ...(process.env.NODE_ENV === 'development' && { 
+      message: "Error retrieving order details",
+      ...(process.env.NODE_ENV === "development" && {
         error: error.message,
-        stack: error.stack
-      })
+        stack: error.stack,
+      }),
     });
   }
 };
@@ -221,44 +234,44 @@ export const getOrderById = async (req, res) => {
 export const getUserOrders = async (req, res) => {
   try {
     // Debug logging
-    console.log('User in getUserOrders:', req.user);
-    
+    console.log("User in getUserOrders:", req.user);
+
     if (!req.user || !req.user.id) {
       return res.status(401).json({
         success: false,
-        message: 'Authentication required'
+        message: "Authentication required",
       });
     }
 
     const userId = req.user.id;
-    console.log('Fetching orders for user ID:', userId);
-    
+    console.log("Fetching orders for user ID:", userId);
+
     const orders = await Order.find({ user: userId })
       .sort({ createdAt: -1 })
-      .populate('products.product', 'name price')
+      .populate("products.product", "name price")
       .lean();
 
     console.log(`Found ${orders.length} orders for user ${userId}`);
-    
+
     res.status(200).json({
       success: true,
       count: orders.length,
-      data: orders
+      data: orders,
     });
   } catch (error) {
-    console.error('Error in getUserOrders:', {
+    console.error("Error in getUserOrders:", {
       error: error.message,
       stack: error.stack,
-      user: req.user
+      user: req.user,
     });
-    
+
     res.status(500).json({
       success: false,
-      message: 'Error retrieving user orders',
-      ...(process.env.NODE_ENV === 'development' && { 
+      message: "Error retrieving user orders",
+      ...(process.env.NODE_ENV === "development" && {
         error: error.message,
-        stack: error.stack
-      })
+        stack: error.stack,
+      }),
     });
   }
 };
@@ -269,43 +282,142 @@ export const getUserOrders = async (req, res) => {
  * @param {import('express').Response} res - Express response object
  */
 export const updateOrderStatus = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-   const { orderId: id } = req.params
-   
-    const { status } = req.body;
+    const { orderId: id } = req.params;
+    const { status, adminNote } = req.body;
 
-    const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid status value'
-      });
-    }
-
-    const order = await Order.findByIdAndUpdate(
-      id,
-      { status, updatedAt: new Date() },
-      { new: true, runValidators: true }
+    console.log(
+      `[DEBUG] Updating order status. Order ID: ${id}, New Status: ${status}`
     );
 
-    if (!order) {
-      return res.status(404).json({
+    // Validate status is provided
+    if (!status) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
         success: false,
-        message: 'Order not found'
+        message: "Status is required in the request body",
       });
     }
 
+    // Get valid statuses from the Order model schema
+    const validStatuses = Order.schema.path("status").enumValues;
+
+    // Validate the status is one of the allowed values
+    if (!validStatuses.includes(status)) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+        validStatuses,
+      });
+    }
+
+    // Find the order
+    const order = await Order.findById(id).session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // Check for status transition rules
+    const currentStatus = order.status;
+
+    // If changing to cancelled, handle product quantity restoration
+    if (status === "cancelled" && currentStatus !== "cancelled") {
+      console.log(`[DEBUG] Restoring quantities for cancelled order ${id}`);
+      for (const item of order.products) {
+        await Product.findByIdAndUpdate(
+          item.product,
+          { $inc: { quantity: item.quantity } },
+          { session }
+        );
+      }
+    }
+    // If changing from cancelled to any other status, validate product quantities
+    else if (currentStatus === "cancelled" && status !== "cancelled") {
+      console.log(
+        `[DEBUG] Validating product quantities for uncancelling order ${id}`
+      );
+      for (const item of order.products) {
+        const product = await Product.findById(item.product).session(session);
+        if (product.quantity < item.quantity) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            success: false,
+            message: `Not enough stock for product: ${product.name}. Available: ${product.quantity}, Requested: ${item.quantity}`,
+            product: product._id,
+            available: product.quantity,
+            requested: item.quantity,
+          });
+        }
+        // Reduce quantities if moving from cancelled to any other status
+        await Product.findByIdAndUpdate(
+          item.product,
+          { $inc: { quantity: -item.quantity } },
+          { session }
+        );
+      }
+    }
+
+    // Update the order status and add admin note if provided
+    order.status = status;
+    order.updatedAt = new Date();
+
+    // Add admin note if provided
+    // Add admin note if provided
+    if (adminNote) {
+      const timestamp = new Date().toISOString();
+      const note = `[${timestamp}] Admin: ${adminNote}`;
+      if (order.notes) {
+        // If notes exist, append the new note with a newline
+        order.notes = `${order.notes}\n${note}`;
+      } else {
+        // If no notes exist, create a new string with the note
+        order.notes = note;
+      }
+    }
+
+    await order.save({ session });
+    await session.commitTransaction();
+    session.endSession();
+
+    console.log(
+      `[DEBUG] Order ${id} status updated from ${currentStatus} to ${status}`
+    );
     res.status(200).json({
       success: true,
       data: order,
-      message: 'Order status updated successfully'
+      message: `Order status updated to ${status} successfully`,
     });
   } catch (error) {
-    console.error('Error updating order status:', error);
+    await session.abortTransaction();
+    session.endSession();
+
+    console.error("[ERROR] Error updating order status:", {
+      error: error.message,
+      stack: error.stack,
+      params: req.params,
+      body: req.body,
+    });
+
     res.status(500).json({
       success: false,
-      message: 'Error updating order status',
-      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+      message: "Error updating order status",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Internal server error",
     });
   }
 };
@@ -320,46 +432,52 @@ export const cancelOrder = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { orderId:id } = req.params;
-    console.log('orderId:', id)
-    const userId = req.user.id;  // Changed from _id to id
+    const { orderId: id } = req.params;
+    console.log("orderId:", id);
+    const userId = req.user.id; // Changed from _id to id
 
-    console.log(`[DEBUG] Attempting to cancel order. Order ID: ${id}, User ID: ${userId}`);
+    console.log(
+      `[DEBUG] Attempting to cancel order. Order ID: ${id}, User ID: ${userId}`
+    );
 
     // First, check if the order exists
     console.log(`[DEBUG] Querying order with ID: ${id}`);
     const order = await Order.findById(id).session(session);
-    
+
     if (!order) {
       console.log(`[DEBUG] Order ${id} not found in the database.`);
       await session.abortTransaction();
       session.endSession();
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: "Order not found",
       });
     }
 
     // Check if the order belongs to the user
     if (order.user.toString() !== userId.toString()) {
-      console.log(`[DEBUG] User ${userId} is not authorized to cancel order ${id}. Order belongs to user ${order.user}`);
+      console.log(
+        `[DEBUG] User ${userId} is not authorized to cancel order ${id}. Order belongs to user ${order.user}`
+      );
       await session.abortTransaction();
       session.endSession();
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to cancel this order'
+        message: "Not authorized to cancel this order",
       });
     }
 
     // Check if the order is in a cancellable state
-    const cancellableStatuses = ['pending', 'processing'];
+    const cancellableStatuses = ["pending", "processing"];
     if (!cancellableStatuses.includes(order.status)) {
-      console.log(`[DEBUG] Order ${id} cannot be cancelled because its status is ${order.status}`);
+      console.log(
+        `[DEBUG] Order ${id} cannot be cancelled because its status is ${order.status}`
+      );
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({
         success: false,
-        message: `Order cannot be cancelled because it is already ${order.status}`
+        message: `Order cannot be cancelled because it is already ${order.status}`,
       });
     }
 
@@ -374,7 +492,7 @@ export const cancelOrder = async (req, res) => {
     }
 
     // Update order status
-    order.status = 'cancelled';
+    order.status = "cancelled";
     order.updatedAt = new Date();
     await order.save({ session });
 
@@ -385,26 +503,26 @@ export const cancelOrder = async (req, res) => {
     res.status(200).json({
       success: true,
       data: order,
-      message: 'Order cancelled successfully'
+      message: "Order cancelled successfully",
     });
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    
-    console.error('[ERROR] Error in cancelOrder:', {
+
+    console.error("[ERROR] Error in cancelOrder:", {
       error: error.message,
       stack: error.stack,
       params: req.params,
-      user: req.user
+      user: req.user,
     });
-    
+
     res.status(500).json({
       success: false,
-      message: 'Error cancelling order',
-      ...(process.env.NODE_ENV === 'development' && { 
+      message: "Error cancelling order",
+      ...(process.env.NODE_ENV === "development" && {
         error: error.message,
-        stack: error.stack
-      })
+        stack: error.stack,
+      }),
     });
   }
 };
@@ -416,31 +534,31 @@ export const cancelOrder = async (req, res) => {
  */
 export const getAllOrders = async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      status, 
-      sortBy = 'createdAt', 
-      sortOrder = 'desc',
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      sortBy = "createdAt",
+      sortOrder = "desc",
       startDate,
-      endDate
+      endDate,
     } = req.query;
 
-    console.log('Fetching orders with query:', { 
-      page, 
-      limit, 
+    console.log("Fetching orders with query:", {
+      page,
+      limit,
       status,
       sortBy,
       sortOrder,
       startDate,
-      endDate
+      endDate,
     });
 
     const query = {};
 
     // Handle status filter
     if (status) {
-      query.status = { $regex: new RegExp(`^${status}$`, 'i') };
+      query.status = { $regex: new RegExp(`^${status}$`, "i") };
     }
 
     // Handle date range filter
@@ -458,27 +576,27 @@ export const getAllOrders = async (req, res) => {
     }
 
     // Log all available statuses for debugging
-    const statuses = await Order.distinct('status');
-    console.log('Available order statuses in database:', statuses);
+    const statuses = await Order.distinct("status");
+    console.log("Available order statuses in database:", statuses);
 
     // Log the actual query being executed
     const options = {
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
-      sort: { [sortBy]: sortOrder === 'desc' ? -1 : 1 },
+      sort: { [sortBy]: sortOrder === "desc" ? -1 : 1 },
       populate: [
-        { 
-          path: 'user', 
-          select: 'name email' 
+        {
+          path: "user",
+          select: "name email",
         },
-        { 
-          path: 'products.product', 
-          select: 'name price' 
-        }
-      ]
+        {
+          path: "products.product",
+          select: "name price",
+        },
+      ],
     };
 
-    console.log('MongoDB Query:', JSON.stringify({ query, options }, null, 2));
+    console.log("MongoDB Query:", JSON.stringify({ query, options }, null, 2));
 
     // Get a sample of orders within the date range (if specified)
     const sampleQuery = {};
@@ -491,45 +609,47 @@ export const getAllOrders = async (req, res) => {
         sampleQuery.createdAt.$lte = endOfDay;
       }
     }
-    
+
     const sampleOrders = await Order.find(sampleQuery)
       .limit(3)
-      .select('status createdAt')
+      .select("status createdAt")
       .sort({ createdAt: -1 })
       .lean();
-    console.log('Sample of orders in database:', sampleOrders);
+    console.log("Sample of orders in database:", sampleOrders);
 
     // Execute the paginated query
     const orders = await Order.paginate(query, options);
-    
-    console.log(`Paginated query returned ${orders.docs.length} orders out of ${orders.totalDocs} total matching documents`);
-    console.log('Query conditions:', {
-      status: status || 'any',
+
+    console.log(
+      `Paginated query returned ${orders.docs.length} orders out of ${orders.totalDocs} total matching documents`
+    );
+    console.log("Query conditions:", {
+      status: status || "any",
       dateRange: {
-        start: startDate || 'unbounded',
-        end: endDate || 'unbounded',
-        query: query.createdAt || 'no date filter'
+        start: startDate || "unbounded",
+        end: endDate || "unbounded",
+        query: query.createdAt || "no date filter",
       },
       totalDocs: orders.totalDocs,
-      totalPages: orders.totalPages
+      totalPages: orders.totalPages,
     });
 
     res.status(200).json({
       success: true,
       data: orders,
-      message: 'Orders retrieved successfully'
+      message: "Orders retrieved successfully",
     });
   } catch (error) {
-    console.error('Error in getAllOrders:', {
+    console.error("Error in getAllOrders:", {
       error: error.message,
       stack: error.stack,
-      query: req.query
+      query: req.query,
     });
     res.status(500).json({
       success: false,
-      message: 'Error retrieving orders',
+      message: "Error retrieving orders",
       error: error.message,
-      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
     });
   }
 };
@@ -554,40 +674,43 @@ export const getOrderAnalytics = async (req, res) => {
       // Total sales
       Order.aggregate([
         { $match: match },
-        { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
       ]),
       // Orders by status
       Order.aggregate([
         { $match: match },
-        { $group: { _id: '$status', count: { $sum: 1 } } }
+        { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
       // Recent orders
       Order.find(match)
         .sort({ createdAt: -1 })
         .limit(5)
-        .populate('user', 'name email')
+        .populate("user", "name email"),
     ]);
 
     const analytics = {
       totalSales: totalSales[0]?.total || 0,
       totalOrders: await Order.countDocuments(match),
-      ordersByStatus: ordersByStatus.reduce((acc, curr) => ({
-        ...acc,
-        [curr._id]: curr.count
-      }), {}),
-      recentOrders
+      ordersByStatus: ordersByStatus.reduce(
+        (acc, curr) => ({
+          ...acc,
+          [curr._id]: curr.count,
+        }),
+        {}
+      ),
+      recentOrders,
     };
 
     res.status(200).json({
       success: true,
-      data: analytics
+      data: analytics,
     });
   } catch (error) {
-    console.error('Error getting order analytics:', error);
+    console.error("Error getting order analytics:", error);
     res.status(500).json({
       success: false,
-      message: 'Error retrieving analytics',
-      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+      message: "Error retrieving analytics",
+      ...(process.env.NODE_ENV === "development" && { error: error.message }),
     });
   }
 };

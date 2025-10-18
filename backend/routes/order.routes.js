@@ -92,6 +92,20 @@ adminRouter.patch(
   updateOrderStatus
 );
 
+
+// Ship order (admin only)
+adminRouter.post(
+  '/:orderId/ship',
+  orderIdValidation,
+  validateRequest,
+  (req, res, next) => {
+    // Set the status to 'shipped' and pass to updateOrderStatus
+    req.body.status = 'shipped';
+    next();
+  },
+  updateOrderStatus
+);
+
 // Get order analytics (admin only)
 adminRouter.get(
   '/analytics',
