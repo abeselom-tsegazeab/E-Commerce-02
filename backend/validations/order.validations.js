@@ -94,10 +94,106 @@ export const orderAnalyticsValidation = [
     .withMessage('Invalid groupBy value. Must be one of: day, week, month, year')
 ];
 
+// Validation for order return request
+export const orderReturnValidation = [
+  body('reason')
+    .notEmpty().withMessage('Return reason is required')
+    .isString()
+    .trim()
+    .isLength({ max: 500 }).withMessage('Reason cannot exceed 500 characters'),
+  body('items')
+    .isArray({ min: 1 }).withMessage('At least one item must be returned')
+    .custom((items) => {
+      for (const [index, item] of items.entries()) {
+        if (!item.orderItemId) {
+          throw new Error(`Order item ID is required for item at index ${index}`);
+        }
+        if (!item.quantity || item.quantity < 1) {
+          throw new Error(`Quantity must be at least 1 for item at index ${index}`);
+        }
+        if (!['defective', 'wrong_item', 'unwanted', 'other'].includes(item.reason)) {
+          throw new Error(`Invalid return reason for item at index ${index}`);
+        }
+      }
+      return true;
+    })
+];
+
+// Validation for order refund
+export const orderRefundValidation = [
+  body('amount')
+    .isFloat({ min: 0 }).withMessage('Refund amount must be a positive number'),
+  body('reason')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: 500 }).withMessage('Reason cannot exceed 500 characters'),
+  body('refundMethod')
+    .isIn(['original_payment', 'store_credit', 'other'])
+    .withMessage('Invalid refund method')
+];
+
+// Validation for order tracking
+export const orderTrackingValidation = [
+  param('trackingNumber')
+    .notEmpty().withMessage('Tracking number is required')
+    .isString()
+    .trim()
+    .isLength({ min: 5, max: 50 }).withMessage('Tracking number must be between 5 and 50 characters')
+];
+
+// Validation for order export
+export const orderExportValidation = [
+  query('format')
+    .optional()
+    .isIn(['csv', 'excel', 'json'])
+    .withMessage('Invalid export format. Must be one of: csv, excel, json'),
+  query('startDate')
+    .optional()
+    .isISO8601().withMessage('Invalid start date format. Use ISO8601 (e.g., YYYY-MM-DD)'),
+  query('endDate')
+    .optional()
+    .isISO8601().withMessage('Invalid end date format. Use ISO8601 (e.g., YYYY-MM-DD)'),
+  query('status')
+    .optional()
+    .isIn(['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'])
+    .withMessage('Invalid status value')
+];
+
+// Validation for bulk order status update
+export const bulkOrderStatusValidation = [
+  body('orderIds')
+    .isArray({ min: 1 })
+    .withMessage('At least one order ID is required')
+    .custom((orderIds) => {
+      if (!orderIds.every(id => mongoose.Types.ObjectId.isValid(id))) {
+        throw new Error('Invalid order ID format');
+      }
+      return true;
+    }),
+  body('status')
+    .isIn(['processing', 'shipped', 'delivered', 'cancelled', 'on_hold'])
+    .withMessage('Invalid status value'),
+  body('notifyCustomer')
+    .optional()
+    .isBoolean()
+    .withMessage('notifyCustomer must be a boolean'),
+  body('statusNote')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage('Status note cannot exceed 1000 characters')
+];
+
 export default {
   createOrderValidation,
   orderIdValidation,
   updateOrderStatusValidation,
   orderQueryValidation,
-  orderAnalyticsValidation
+  orderAnalyticsValidation,
+  orderReturnValidation,
+  orderRefundValidation,
+  orderTrackingValidation,
+  orderExportValidation
 };

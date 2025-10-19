@@ -9,14 +9,34 @@ import {
   updateOrderStatus,
   cancelOrder,
   getAllOrders,
-  getOrderAnalytics
+  getOrderAnalytics,
 } from '../controllers/order/order.controller.js';
+import {
+  generateInvoice,
+  requestReturn,
+  trackOrder,
+  exportOrders,
+} from '../controllers/order/order.extra.controller.js';
+import {
+  processRefund,
+  listReturnRequests,
+  updateReturnStatus,
+  splitOrder,
+  addOrderNote,
+  generateSalesReport,
+  bulkUpdateOrderStatus,
+} from '../controllers/order/order.admin.controller.js';
 import {
   createOrderValidation,
   orderIdValidation,
   updateOrderStatusValidation,
   orderQueryValidation,
-  orderAnalyticsValidation
+  orderAnalyticsValidation,
+  orderReturnValidation,
+  orderRefundValidation,
+  orderTrackingValidation,
+  orderExportValidation,
+  bulkOrderStatusValidation
 } from '../validations/order.validations.js';
 
 const router = express.Router();
@@ -112,6 +132,89 @@ adminRouter.get(
   orderAnalyticsValidation,
   validateRequest,
   getOrderAnalytics
+);
+
+// Order invoice and returns (authenticated users)
+router.get(
+  '/:orderId/invoice',
+  authenticate,
+  orderIdValidation,
+  validateRequest,
+  generateInvoice
+);
+
+router.post(
+  '/:orderId/return',
+  authenticate,
+  orderIdValidation,
+  orderReturnValidation,
+  validateRequest,
+  requestReturn
+);
+
+// Order tracking (public endpoint)
+router.get(
+  '/track/:trackingNumber',
+  orderTrackingValidation,
+  validateRequest,
+  trackOrder
+);
+
+// Admin order management
+adminRouter.post(
+  '/bulk-update-status',
+  bulkOrderStatusValidation,
+  validateRequest,
+  bulkUpdateOrderStatus
+);
+
+adminRouter.get(
+  '/export',
+  orderExportValidation,
+  validateRequest,
+  exportOrders
+);
+
+// Refund endpoints
+adminRouter.post(
+  '/:orderId/refund',
+  orderIdValidation,
+  orderRefundValidation,
+  validateRequest,
+  processRefund
+);
+
+// Return management
+adminRouter.get(
+  '/returns',
+  listReturnRequests
+);
+
+adminRouter.put(
+  '/returns/:returnId',
+  updateReturnStatus
+);
+
+// Order splitting
+adminRouter.post(
+  '/:orderId/split',
+  orderIdValidation,
+  validateRequest,
+  splitOrder
+);
+
+// Order notes
+adminRouter.post(
+  '/:orderId/notes',
+  orderIdValidation,
+  validateRequest,
+  addOrderNote
+);
+
+// Reports
+adminRouter.get(
+  '/reports/sales',
+  generateSalesReport
 );
 
 // Mount admin routes with /api/admin/orders prefix
