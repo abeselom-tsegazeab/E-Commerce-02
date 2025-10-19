@@ -318,4 +318,57 @@ router.get(
   generateSalesReport
 );
 
+
+// Add this to your order.routes.js
+router.get('/debug/order/:id', authenticate, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .select('user guestEmail status items createdAt deliveredAt');
+    
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+    
+    const isOwner = (
+      (order.user && req.user?._id && order.user.toString() === req.user._id.toString()) ||
+      (order.guestEmail && req.user?.email && 
+       order.guestEmail.toLowerCase() === req.user.email.toLowerCase())
+    );
+
+    res.json({
+      success: true,
+      order: {
+        _id: order._id,
+        user: order.user?.toString(),
+        guestEmail: order.guestEmail,
+        status: order.status,
+        createdAt: order.createdAt,
+        deliveredAt: order.deliveredAt,
+        currentUser: (req.user?._id || req.user?.id)?.toString(),
+        currentUserEmail: req.user?.email,
+        isOwner,
+        isDelivered: order.status === 'delivered',
+        isWithinReturnWindow: order.deliveredAt ? 
+          (new Date() - new Date(order.deliveredAt)) < (30 * 24 * 60 * 60 * 1000) : false
+      },
+      authInfo: {
+        isAuthenticated: !!req.user,
+        user: req.user ? {
+          id: req.user.id || req.user._id?.toString(),
+          email: req.user.email,
+          ...(req.user.role && { role: req.user.role }),
+          ...(req.user.name && { name: req.user.name })
+        } : null,
+        hasUserId: !!(req.user?._id || req.user?.id)
+      }
+    });
+  } catch (error) {
+    console.error('Debug error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
 export default router;

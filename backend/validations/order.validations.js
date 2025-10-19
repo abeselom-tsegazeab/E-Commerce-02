@@ -135,11 +135,9 @@ export const orderRefundValidation = [
 
 // Validation for order tracking
 export const orderTrackingValidation = [
-  param('trackingNumber')
-    .notEmpty().withMessage('Tracking number is required')
-    .isString()
-    .trim()
-    .isLength({ min: 5, max: 50 }).withMessage('Tracking number must be between 5 and 50 characters')
+  param('orderId')
+    .notEmpty().withMessage('Order ID is required')
+    .isMongoId().withMessage('Invalid order ID format')
 ];
 
 // Validation for order export

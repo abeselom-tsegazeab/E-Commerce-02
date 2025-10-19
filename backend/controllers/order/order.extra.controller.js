@@ -145,8 +145,16 @@ export const requestReturn = async (req, res) => {
     }
 
     // Check order ownership
-    const isOwner = (order.user && order.user.toString() === userId?.toString()) ||
-                   (order.guestEmail && userEmail && order.guestEmail === userEmail);
+    const orderUserId = order.user?._id?.toString() || order.user?.toString();
+    const currentUserId = req.user?._id?.toString() || req.user?.id?.toString();
+    const isGuestOrder = !!order.guestEmail;
+    
+    const isOwner = (
+      // For registered users
+      (orderUserId && currentUserId && orderUserId === currentUserId) ||
+      // For guest orders
+      (isGuestOrder && userEmail && order.guestEmail?.toLowerCase() === userEmail.toLowerCase())
+    );
 
     if (!isOwner) {
       return res.status(403).json({
@@ -154,7 +162,7 @@ export const requestReturn = async (req, res) => {
         error: 'Unauthorized',
         details: {
           issue: 'You do not have permission to return this order',
-          suggestion: order.guestEmail 
+          suggestion: isGuestOrder
             ? 'Please ensure you\'re logged in with the email used to place this order.'
             : 'This order belongs to a different account.'
         }
@@ -267,31 +275,53 @@ export const requestReturn = async (req, res) => {
       });
     }
 
-    // Create return request
+    // Add return request to order
+    order.returns = order.returns || [];
+    
+    // Format return items for the returns array
+    const returnItems = validItems.map(item => ({
+      orderItemId: item.orderItemId,
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      reason: item.reason,
+      status: 'requested',
+      processedAt: null
+    }));
+
+    // Create the return request
     const returnRequest = {
-      returnId: `RTN-${uuidv4().substring(0, 8).toUpperCase()}`,
+      returnId: `RTN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       status: 'requested',
       reason,
-      items: validItems.map(item => ({
-        orderItemId: item.orderItemId,
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        reason: item.reason,
-        status: 'pending',
-      })),
+      items: returnItems,
       requestedAt: new Date(),
+      processedBy: null,
+      notes: [],
       returnDeadline,
       remainingReturnWindowDays: Math.ceil(differenceInDays(returnDeadline, today))
     };
 
-    // Add return request to order
-    order.returns = order.returns || [];
+    // Add to returns array
     order.returns.push(returnRequest);
+
+    // Mark the specific items as return requested
+    for (const item of validItems) {
+      const orderItem = order.items.find(i => i._id.toString() === item.orderItemId);
+      if (orderItem) {
+        orderItem.returnStatus = 'requested';
+        orderItem.returnRequestedAt = new Date();
+        orderItem.returnReason = item.reason;
+      }
+    }
+
+    // Only update the main order status to 'refunded' if all items are being returned
+    const allItemsBeingReturned = order.items.every(item => 
+      item.returnStatus === 'requested' || item.returnStatus === 'returned'
+    );
     
-    // Update order status if needed
-    if (order.status !== 'return_requested') {
-      order.status = 'return_requested';
+    if (allItemsBeingReturned) {
+      order.status = 'refunded';
     }
 
     await order.save();
@@ -339,29 +369,19 @@ export const requestReturn = async (req, res) => {
  */
 export const trackOrder = async (req, res) => {
   try {
-    const { trackingNumber } = req.params;
+    const { orderId } = req.params;
 
-    if (!trackingNumber) {
-      return res.status(400).json({
-        success: false,
-        error: 'Tracking number is required',
-        details: {
-          suggestion: 'Please provide a valid tracking number.'
-        }
-      });
-    }
-
-    const order = await Order.findOne({
-      'shipping.trackingNumber': trackingNumber,
-    }).select('orderNumber status shipping.items trackingHistory customerEmail');
+    const order = await Order.findById(orderId)
+      .select('orderNumber status shipping trackingHistory customerEmail items')
+      .populate('items.product', 'name image');
 
     if (!order) {
       return res.status(404).json({
         success: false,
         error: 'Order not found',
         details: {
-          trackingNumber,
-          suggestion: 'Please verify the tracking number and try again.'
+          orderId,
+          suggestion: 'Please verify the order ID and try again.'
         }
       });
     }
@@ -373,19 +393,34 @@ export const trackOrder = async (req, res) => {
       timeAgo: formatDistanceToNow(new Date(event.timestamp), { addSuffix: true })
     }));
 
+    // Format order items with product details
+    const formattedItems = order.items.map(item => ({
+      name: item.product?.name || item.name,
+      image: item.product?.image || item.image,
+      quantity: item.quantity,
+      price: item.price,
+      status: item.status
+    }));
+
     res.status(200).json({
       success: true,
       data: {
+        orderId: order._id,
         orderNumber: order.orderNumber,
         status: order.status,
-        trackingNumber: order.shipping?.trackingNumber,
-        carrier: order.shipping?.carrier || 'Standard Shipping',
-        estimatedDelivery: order.shipping?.estimatedDelivery,
+        items: formattedItems,
+        shipping: {
+          trackingNumber: order.shipping?.trackingNumber,
+          carrier: order.shipping?.carrier || 'Standard Shipping',
+          estimatedDelivery: order.shipping?.estimatedDelivery,
+          address: order.shipping?.address
+        },
         trackingHistory: formattedHistory,
         customerEmail: order.customerEmail ? 
-          order.customerEmail.replace(/^(.)(.*)(@.*)$/, (_, a, b, c) => a + b.replace(/./g, '*') + c) : 
+          order.customerEmail.replace(/^(.)(.*)(@.*)$/, (_, a, b, c) => a + b.replace(/\./g, '*') + c) : 
           null,
-        lastUpdated: order.updatedAt,
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
         supportContact: 'support@example.com'
       }
     });

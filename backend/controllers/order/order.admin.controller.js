@@ -147,6 +147,7 @@ export const listReturnRequests = async (req, res) => {
   try {
     const { status, startDate, endDate } = req.query;
     
+    // Start with orders that have returns
     const query = { 'returns.0': { $exists: true } };
     
     // Apply filters
@@ -156,27 +157,52 @@ export const listReturnRequests = async (req, res) => {
     
     if (startDate || endDate) {
       query['returns.requestedAt'] = {};
-      if (startDate) query['returns.requestedAt'].$gte = new Date(startDate);
-      if (endDate) query['returns.requestedAt'].$lte = new Date(endDate);
+      if (startDate) {
+        query['returns.requestedAt'].$gte = new Date(startDate);
+      }
+      if (endDate) {
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        query['returns.requestedAt'].$lte = endOfDay;
+      }
     }
 
+    // Get orders with their returns
     const orders = await Order.find(query)
-      .select('orderNumber returns status')
+      .select('orderNumber status returns items customerEmail')
+      .populate('items.product', 'name')
       .sort({ 'returns.requestedAt': -1 })
       .lean();
 
-    // Flatten returns for easier processing
-    const returns = orders.flatMap(order => 
-      order.returns.map(ret => ({
-        returnId: ret.returnId,
-        orderId: order._id,
-        orderNumber: order.orderNumber,
-        status: ret.status,
-        reason: ret.reason,
-        requestedAt: ret.requestedAt,
-        items: ret.items,
-      }))
-    );
+    // Process returns with more details
+    const returns = [];
+    
+    orders.forEach(order => {
+      order.returns.forEach(ret => {
+        // Find the items in this return
+        const returnItems = ret.items.map(item => {
+          const orderItem = order.items.find(i => i._id.toString() === item.orderItemId);
+          return {
+            ...item,
+            name: orderItem?.name || item.name,
+            product: orderItem?.product || null
+          };
+        });
+        
+        returns.push({
+          returnId: ret.returnId,
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          status: ret.status,
+          reason: ret.reason,
+          requestedAt: ret.requestedAt,
+          processedAt: ret.processedAt,
+          items: returnItems,
+          customerEmail: order.customerEmail,
+          orderStatus: order.status
+        });
+      });
+    });
 
     res.status(200).json({
       success: true,
