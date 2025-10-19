@@ -179,7 +179,72 @@ const orderSchema = new mongoose.Schema(
       },
       index: true,
       sparse: true
-    }
+    },
+
+    /** @type {Array} Return requests */
+    returns: [{
+      returnId: {
+        type: String,
+        required: true,
+        unique: true
+      },
+      status: {
+        type: String,
+        enum: ['requested', 'approved', 'rejected', 'processing', 'completed'],
+        default: 'requested'
+      },
+      reason: {
+        type: String,
+        required: true
+      },
+      items: [{
+        orderItemId: {
+          type: mongoose.Schema.Types.ObjectId,
+          required: true,
+          ref: 'Order.items'
+        },
+        name: String,
+        quantity: {
+          type: Number,
+          required: true,
+          min: 1
+        },
+        price: {
+          type: Number,
+          required: true,
+          min: 0
+        },
+        reason: String,
+        status: {
+          type: String,
+          enum: ['pending', 'approved', 'rejected', 'received', 'refunded'],
+          default: 'pending'
+        },
+        processedAt: Date
+      }],
+      requestedAt: {
+        type: Date,
+        default: Date.now
+      },
+      processedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      processedAt: Date,
+      notes: [{
+        text: String,
+        createdAt: {
+          type: Date,
+          default: Date.now
+        },
+        createdBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User'
+        }
+      }],
+      returnDeadline: Date,
+      remainingReturnWindowDays: Number
+    }]
   },
   {
     timestamps: true,

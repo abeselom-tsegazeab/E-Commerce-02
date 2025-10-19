@@ -228,6 +228,8 @@ export const updateReturnStatus = async (req, res) => {
     const { returnId } = req.params;
     const { status, notes } = req.body;
 
+    console.log('Updating return status:', { returnId, status, notes });
+
     // Validate status
     const validStatuses = ['approved', 'rejected', 'processing', 'completed'];
     if (!validStatuses.includes(status)) {
@@ -237,40 +239,66 @@ export const updateReturnStatus = async (req, res) => {
       });
     }
 
+    // Find the order containing this return
     const order = await Order.findOne({
-      'returns.returnId': returnId,
+      'returns.returnId': returnId
     });
 
     if (!order) {
+      console.error('Order with return not found for returnId:', returnId);
       return res.status(404).json({
         success: false,
         error: 'Return request not found',
+        details: {
+          returnId,
+          suggestion: 'Verify the return ID is correct and the return exists'
+        }
       });
     }
 
-    // Find and update the specific return
+    // Find the specific return in the order
     const returnRequest = order.returns.find(r => r.returnId === returnId);
     if (!returnRequest) {
+      console.error('Return request not found in order:', {
+        orderId: order._id,
+        returnId,
+        availableReturns: order.returns ? order.returns.map(r => r.returnId) : 'none'
+      });
       return res.status(404).json({
         success: false,
-        error: 'Return request not found',
+        error: 'Return request not found in order',
+        details: {
+          orderId: order._id,
+          returnId,
+          availableReturns: order.returns ? order.returns.length : 0
+        }
       });
     }
 
-    // Update status and add note if provided
+    // Update status
+    const previousStatus = returnRequest.status;
     returnRequest.status = status;
     returnRequest.updatedAt = new Date();
     
+    // Add note if provided
     if (notes) {
       returnRequest.notes = returnRequest.notes || [];
       returnRequest.notes.push({
-        note: notes,
+        text: notes,
         addedBy: req.user._id,
         addedAt: new Date(),
       });
     }
 
+    // Save the order with updated return
     await order.save();
+
+    console.log('Successfully updated return status:', {
+      returnId,
+      previousStatus,
+      newStatus: status,
+      orderId: order._id
+    });
 
     res.status(200).json({
       success: true,
@@ -278,13 +306,21 @@ export const updateReturnStatus = async (req, res) => {
         returnId: returnRequest.returnId,
         status: returnRequest.status,
         updatedAt: returnRequest.updatedAt,
+        orderId: order._id,
+        orderNumber: order.orderNumber
       },
     });
   } catch (error) {
-    console.error('Error updating return status:', error);
+    console.error('Error updating return status:', {
+      error: error.message,
+      stack: error.stack,
+      params: req.params,
+      body: req.body
+    });
     res.status(500).json({
       success: false,
       error: 'Failed to update return status',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

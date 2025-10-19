@@ -302,53 +302,78 @@ export const requestReturn = async (req, res) => {
       remainingReturnWindowDays: Math.ceil(differenceInDays(returnDeadline, today))
     };
 
-    // Add to returns array
-    order.returns.push(returnRequest);
+    try {
+      console.log('Preparing to save return request:', {
+        orderId: order._id,
+        returnRequest,
+        validItems
+      });
 
-    // Mark the specific items as return requested
-    for (const item of validItems) {
-      const orderItem = order.items.find(i => i._id.toString() === item.orderItemId);
-      if (orderItem) {
-        orderItem.returnStatus = 'requested';
-        orderItem.returnRequestedAt = new Date();
-        orderItem.returnReason = item.reason;
+      // Add to returns array
+      order.returns.push(returnRequest);
+
+      // Mark the specific items as return requested
+      for (const item of validItems) {
+        const orderItem = order.items.find(i => i._id.toString() === item.orderItemId);
+        if (orderItem) {
+          orderItem.returnStatus = 'requested';
+          orderItem.returnRequestedAt = new Date();
+          orderItem.returnReason = item.reason;
+          console.log('Updated order item with return status:', {
+            orderItemId: item.orderItemId,
+            status: 'requested',
+            reason: item.reason
+          });
+        } else {
+          console.error('Order item not found:', item.orderItemId);
+        }
       }
-    }
 
-    // Only update the main order status to 'refunded' if all items are being returned
-    const allItemsBeingReturned = order.items.every(item => 
-      item.returnStatus === 'requested' || item.returnStatus === 'returned'
-    );
-    
-    if (allItemsBeingReturned) {
-      order.status = 'refunded';
-    }
-
-    await order.save();
-
-    // TODO: Send return request confirmation email
-
-    res.status(201).json({
-      success: true,
-      data: {
-        returnId: returnRequest.returnId,
-        status: returnRequest.status,
-        items: returnRequest.items.map(item => ({
-          orderItemId: item.orderItemId,
-          name: item.name,
-          quantity: item.quantity,
-          status: item.status
-        })),
-        requestedAt: returnRequest.requestedAt,
-        returnDeadline: returnRequest.returnDeadline,
-        remainingReturnWindowDays: returnRequest.remainingReturnWindowDays,
-        nextSteps: [
-          'We\'ve received your return request.',
-          'Our team will review your request and contact you within 1-2 business days.',
-          'Please keep the items in their original packaging.'
-        ]
+      // Only update the main order status to 'refunded' if all items are being returned
+      const allItemsBeingReturned = order.items.every(item => 
+        item.returnStatus === 'requested' || item.returnStatus === 'returned'
+      );
+      
+      if (allItemsBeingReturned) {
+        order.status = 'refunded';
+        console.log('All items being returned, updating order status to refunded');
       }
-    });
+
+      // Save the order with the new return request
+      console.log('Saving order with new return request...');
+      const savedOrder = await order.save({ validateBeforeSave: false });
+      console.log('Order saved successfully:', {
+        orderId: savedOrder._id,
+        returnsCount: savedOrder.returns ? savedOrder.returns.length : 0,
+        status: savedOrder.status
+      });
+
+      // Send response with return request details
+      res.status(201).json({
+        success: true,
+        data: {
+          returnId: returnRequest.returnId,
+          status: returnRequest.status,
+          items: returnRequest.items.map(item => ({
+            orderItemId: item.orderItemId,
+            name: item.name,
+            quantity: item.quantity,
+            status: item.status
+          })),
+          requestedAt: returnRequest.requestedAt,
+          returnDeadline: returnRequest.returnDeadline,
+          remainingReturnWindowDays: returnRequest.remainingReturnWindowDays,
+          nextSteps: [
+            'We\'ve received your return request.',
+            'Our team will review your request and contact you within 1-2 business days.',
+            'Please keep the items in their original packaging.'
+          ]
+        }
+      });
+    } catch (saveError) {
+      console.error('Error saving return request:', saveError);
+      throw new Error('Failed to save return request');
+    }
   } catch (error) {
     console.error('Error processing return request:', error);
     res.status(500).json({
