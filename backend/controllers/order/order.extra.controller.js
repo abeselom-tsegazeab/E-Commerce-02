@@ -2,6 +2,14 @@ import Order from '../../models/order.model.js';
 import { generateTrackingNumber } from './order.utils.js';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+import { generateInvoicePDF } from '../../utils/pdfGenerator.js';
+
+// Get the current file's directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Generate and send order invoice
@@ -11,10 +19,12 @@ import { format } from 'date-fns';
 export const generateInvoice = async (req, res) => {
   try {
     const { orderId } = req.params;
+    
+    // Find the order with necessary population
     const order = await Order.findById(orderId)
       .populate('user', 'email firstName lastName')
       .populate('items.product', 'name price')
-      .populate('items.variant', 'name price')
+      .populate('products.product', 'name price')
       .lean();
 
     if (!order) {
@@ -24,43 +34,97 @@ export const generateInvoice = async (req, res) => {
       });
     }
 
-    // Generate PDF invoice
+    // Debug log
+    console.log('Order data:', JSON.stringify({
+      _id: order._id,
+      itemsCount: order.items?.length,
+      productsCount: order.products?.length,
+      fields: Object.keys(order)
+    }, null, 2));
+
+    // Use items if available, otherwise fall back to products
+    const orderItems = Array.isArray(order.items) && order.items.length > 0 
+      ? order.items 
+      : Array.isArray(order.products) 
+        ? order.products.map(p => ({ ...p, product: p.product || p })) 
+        : [];
+
+    if (orderItems.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No items found in this order',
+        details: 'Both items and products arrays are empty or invalid'
+      });
+    }
+
+    // Get the logo path and check if it exists
+    const publicDir = path.join(__dirname, '../../../public');
+    const logoPath = path.join(publicDir, 'logo.png');
+    
+    // Create public directory if it doesn't exist
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+
+    // Check if logo exists, if not, set to null
+    const logo = fs.existsSync(logoPath) ? logoPath : null;
+
+    // Generate PDF invoice with the available items
     const invoiceData = {
-      orderId: order.orderNumber,
-      date: format(new Date(order.createdAt), 'MMMM dd, yyyy'),
+      orderId: order.orderNumber || order._id.toString(),
+      date: format(new Date(order.createdAt || new Date()), 'MMMM dd, yyyy'),
+      logo: logo, // Will be null if logo doesn't exist
       customer: {
-        name: `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`,
-        email: order.user?.email || order.guestEmail,
-        address: order.shippingAddress,
+        name: order.shippingAddress ? 
+          `${order.shippingAddress.firstName || ''} ${order.shippingAddress.lastName || ''}`.trim() || 'Guest Customer' : 
+          'Guest Customer',
+        email: order.user?.email || order.guestEmail || 'no-email@example.com',
+        address: order.shippingAddress || {
+          street: 'N/A',
+          city: 'N/A',
+          state: 'N/A',
+          postalCode: 'N/A',
+          country: 'N/A'
+        },
       },
-      items: order.items.map(item => ({
-        name: item.product.name,
-        variant: item.variant?.name || 'N/A',
-        quantity: item.quantity,
-        price: item.price,
-        total: item.price * item.quantity,
-      })),
-      subtotal: order.subtotal,
-      shipping: order.shippingFee,
-      tax: order.tax,
-      total: order.totalAmount,
+      items: orderItems.map(item => {
+        const product = item.product || {};
+        const productName = product.name || 'Unknown Product';
+        const productPrice = Number(item.price) || 0;
+        const quantity = Number(item.quantity) || 1;
+        
+        return {
+          name: productName,
+          variant: item.variant || product.variant || 'N/A',
+          quantity: quantity,
+          price: productPrice,
+          total: productPrice * quantity,
+        };
+      }),
+      subtotal: Number(order.subtotal) || 0,
+      shipping: Number(order.shippingFee) || 0,
+      tax: Number(order.tax) || 0,
+      total: Number(order.totalAmount) || 0,
     };
 
-    const pdfBuffer = await generatePDF('invoice', invoiceData);
+    console.log('Invoice data:', JSON.stringify(invoiceData, null, 2));
+
+    const pdfBuffer = await generateInvoicePDF(invoiceData);
 
     // Send response with PDF
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=invoice-${order.orderNumber}.pdf`,
+      'Content-Disposition': `attachment; filename=invoice-${invoiceData.orderId}.pdf`,
       'Content-Length': pdfBuffer.length,
     });
 
-    res.send(pdfBuffer);
+    return res.send(pdfBuffer);
   } catch (error) {
     console.error('Error generating invoice:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Failed to generate invoice',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

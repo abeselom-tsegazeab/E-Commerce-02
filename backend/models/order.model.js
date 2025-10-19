@@ -30,40 +30,93 @@ const orderSchema = new mongoose.Schema(
       index: true
     },
     
-    /** @type {OrderItem[]} List of ordered products */
-    products: [{
+    /** @type {OrderItem[]} List of ordered items */
+    items: [{
       product: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Product",
-        required: true
+        required: [true, 'Product ID is required'],
+        validate: {
+          validator: function(v) {
+            return mongoose.Types.ObjectId.isValid(v);
+          },
+          message: props => `${props.value} is not a valid product ID`
+        }
       },
       quantity: {
         type: Number,
-        required: true,
-        min: 1
+        required: [true, 'Quantity is required'],
+        min: [1, 'Quantity must be at least 1']
       },
       price: {
         type: Number,
-        required: true,
-        min: 0
+        required: [true, 'Price is required'],
+        min: [0, 'Price cannot be negative']
       },
       name: {
         type: String,
-        required: true
+        required: [true, 'Product name is required']
       },
       image: {
-        type: String
+        type: String,
+        default: ''
       },
       variant: {
-        type: String
+        type: String,
+        default: ''
+      },
+      sku: String,
+      weight: Number,
+      tax: {
+        type: Number,
+        default: 0
+      },
+      discount: {
+        type: Number,
+        default: 0
+      },
+      total: {
+        type: Number,
+        default: function() {
+          return (this.quantity * this.price) - (this.discount || 0);
+        }
+      }
+    }],
+
+    /** @type {Array} Legacy products field for backward compatibility */
+    products: [{
+      product: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product'
+      },
+      quantity: Number,
+      price: Number,
+      name: String,
+      image: String,
+      variant: String,
+      sku: String,
+      weight: Number,
+      tax: {
+        type: Number,
+        default: 0
+      },
+      discount: {
+        type: Number,
+        default: 0
       }
     }],
     
     /** @type {number} Total order amount */
     totalAmount: {
       type: Number,
-      required: true,
-      min: 0
+      required: [true, 'Total amount is required'],
+      min: [0, 'Total amount cannot be negative'],
+      default: function() {
+        // Calculate total from items if not provided
+        return this.items.reduce((total, item) => {
+          return total + (item.quantity * item.price) - (item.discount || 0);
+        }, 0);
+      }
     },
     
     /** @type {string} Stripe session ID for payment */
@@ -129,9 +182,54 @@ const orderSchema = new mongoose.Schema(
     }
   },
   {
-    timestamps: true
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
   }
 );
+
+// Add pre-save middleware to sync items and products
+orderSchema.pre('save', function(next) {
+  // If items is modified, update products for backward compatibility
+  if (this.isModified('items') && this.items) {
+    this.products = this.items.map(item => ({
+      product: item.product,
+      quantity: item.quantity,
+      price: item.price,
+      name: item.name,
+      image: item.image,
+      variant: item.variant,
+      sku: item.sku,
+      weight: item.weight,
+      tax: item.tax,
+      discount: item.discount
+    }));
+  }
+  // If products is modified, update items
+  else if (this.isModified('products') && this.products) {
+    this.items = this.products.map(product => ({
+      product: product.product,
+      quantity: product.quantity,
+      price: product.price,
+      name: product.name,
+      image: product.image,
+      variant: product.variant,
+      sku: product.sku,
+      weight: product.weight,
+      tax: product.tax,
+      discount: product.discount,
+      total: (product.quantity * product.price) - (product.discount || 0)
+    }));
+  }
+  next();
+});
+
+// Add virtual for backward compatibility
+orderSchema.virtual('productsArray', {
+  ref: 'Product',
+  localField: 'items.product',
+  foreignField: '_id'
+});
 
 // Add pagination plugin to the schema
 orderSchema.plugin(mongoosePaginate);

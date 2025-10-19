@@ -104,7 +104,7 @@ adminRouter.get(
 );
 
 // Update order status (admin only)
-adminRouter.patch(
+adminRouter.put(
   '/:orderId/status',
   orderIdValidation,
   updateOrderStatusValidation,
