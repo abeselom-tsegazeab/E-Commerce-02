@@ -1,7 +1,9 @@
 import express from 'express';
-import { param } from 'express-validator';
+import { param, query, body } from 'express-validator';
 import { validateRequest } from '../middleware/validation.middleware.js';
 import { protectRoute as authenticate, adminRoute as authorize, optionalAuth } from '../middleware/auth.middleware.js';
+
+// Import controllers
 import {
   createOrder,
   getOrderById,
@@ -9,14 +11,33 @@ import {
   updateOrderStatus,
   cancelOrder,
   getAllOrders,
-  getOrderAnalytics,
 } from '../controllers/order/order.controller.js';
+
 import {
   generateInvoice,
   requestReturn,
   trackOrder,
-  exportOrders,
 } from '../controllers/order/order.extra.controller.js';
+
+// New controllers
+import {
+  getOrderAnalytics,
+  getRevenueReports,
+  getTopProductsReport
+} from '../controllers/order/order.analytics.controller.js';
+
+import {
+  bulkUpdateOrderStatus,
+  exportOrders
+} from '../controllers/order/order.bulk.controller.js';
+
+import {
+  checkStockLevels,
+  getLowStockAlerts,
+  getBackorderedItems,
+  updateInventory
+} from '../controllers/order/order.inventory.controller.js';
+
 import {
   processRefund,
   listReturnRequests,
@@ -24,20 +45,23 @@ import {
   splitOrder,
   addOrderNote,
   generateSalesReport,
-  bulkUpdateOrderStatus,
 } from '../controllers/order/order.admin.controller.js';
+
+// Import validations
 import {
   createOrderValidation,
   orderIdValidation,
   updateOrderStatusValidation,
   orderQueryValidation,
-  orderAnalyticsValidation,
   orderReturnValidation,
   orderRefundValidation,
   orderTrackingValidation,
+  bulkOrderStatusValidation,
   orderExportValidation,
-  bulkOrderStatusValidation
+  orderAnalyticsValidation
 } from '../validations/order.validations.js';
+
+import Order from '../models/order.model.js';
 
 const router = express.Router();
 
@@ -50,13 +74,144 @@ router.post(
   createOrder
 );
 
-// Protected routes (require authentication)
+// Inventory routes
 router.get(
-  '/my-orders',
+  '/inventory/check-stock',
+  authenticate,
+  [
+    query('items').isArray().withMessage('Items must be an array'),
+    query('items.*.product').isMongoId().withMessage('Invalid product ID'),
+    query('items.*.quantity').isInt({ min: 1 }).withMessage('Quantity must be at least 1')
+  ],
+  validateRequest,
+  async (req, res) => {
+    const stockInfo = await checkStockLevels(req.query.items);
+    res.json(stockInfo);
+  }
+);
+
+// Admin inventory routes
+router.get(
+  '/admin/inventory/low-stock',
+  authenticate,
+  authorize,
+  [
+    query('threshold').optional().isInt({ min: 1 }).withMessage('Threshold must be a positive number')
+  ],
+  validateRequest,
+  async (req, res) => {
+    const threshold = req.query.threshold ? parseInt(req.query.threshold) : 10;
+    const lowStockItems = await getLowStockAlerts(threshold);
+    res.json({ success: true, data: lowStockItems });
+  }
+);
+
+router.get(
+  '/admin/orders/backorders',
+  authenticate,
+  authorize,
+  validateRequest,
+  async (req, res) => {
+    const backorders = await getBackorderedItems();
+    res.json({ success: true, data: backorders });
+  }
+);
+
+// Analytics routes
+router.get(
+  '/analytics',
+  authenticate,
+  authorize,
+  orderAnalyticsValidation,
+  validateRequest,
+  getOrderAnalytics
+);
+
+router.get(
+  '/analytics/revenue',
+  authenticate,
+  authorize,
+  [
+    query('startDate').optional().isISO8601().withMessage('Invalid start date format'),
+    query('endDate').optional().isISO8601().withMessage('Invalid end date format')
+  ],
+  validateRequest,
+  getRevenueReports
+);
+
+router.get(
+  '/analytics/top-products',
+  authenticate,
+  authorize,
+  [
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+    query('startDate').optional().isISO8601().withMessage('Invalid start date format'),
+    query('endDate').optional().isISO8601().withMessage('Invalid end date format')
+  ],
+  validateRequest,
+  getTopProductsReport
+);
+
+// Bulk order operations (admin only)
+router.post(
+  '/bulk/status',
+  authenticate,
+  authorize,
+  bulkOrderStatusValidation,
+  validateRequest,
+  bulkUpdateOrderStatus
+);
+
+// Export orders (admin only)
+router.get(
+  '/export',
+  authenticate,
+  authorize,
+  orderExportValidation,
+  validateRequest,
+  exportOrders
+);
+
+// Webhook for inventory updates (called internally when order status changes)
+router.post(
+  '/webhook/inventory-update/:orderId',
+  [
+    param('orderId').isMongoId().withMessage('Invalid order ID'),
+    body('previousStatus').isString().withMessage('Previous status is required')
+  ],
+  validateRequest,
+  async (req, res) => {
+    try {
+      const order = await Order.findById(req.params.orderId);
+      if (!order) {
+        return res.status(404).json({ success: false, message: 'Order not found' });
+      }
+      
+      await updateInventory(order, req.body.previousStatus);
+      res.json({ success: true, message: 'Inventory updated successfully' });
+    } catch (error) {
+      console.error('Error in inventory webhook:', error);
+      res.status(500).json({ success: false, message: 'Error updating inventory', error: error.message });
+    }
+  }
+);
+
+// Existing order routes
+router.get(
+  '/',
   authenticate,
   orderQueryValidation,
   validateRequest,
   getUserOrders
+);
+
+router.get(
+  '/all',
+  authenticate,
+  authorize,
+  orderQueryValidation,
+  validateRequest,
+  getAllOrders
 );
 
 router.get(
@@ -67,9 +222,15 @@ router.get(
   getOrderById
 );
 
-
-
 router.put(
+  '/:orderId/status',
+  authenticate,
+  updateOrderStatusValidation,
+  validateRequest,
+  updateOrderStatus
+);
+
+router.post(
   '/:orderId/cancel',
   authenticate,
   orderIdValidation,
@@ -77,64 +238,6 @@ router.put(
   cancelOrder
 );
 
-
-// Admin routes - Grouped under /admin/orders
-const adminRouter = express.Router();
-
-// Apply authentication and authorization to all admin routes
-adminRouter.use(authenticate);
-adminRouter.use(authorize); // Ensure only admin can access these routes
-
-// Test admin route
-adminRouter.get('/test-admin', (req, res) => {
-  console.log('Admin test route hit', { user: req.user });
-  res.status(200).json({
-    success: true,
-    message: 'Admin test route is working!',
-    user: req.user || 'No user data'
-  });
-});
-
-// Get all orders (admin only)
-adminRouter.get(
-  '/',
-  orderQueryValidation,
-  validateRequest,
-  getAllOrders
-);
-
-// Update order status (admin only)
-adminRouter.put(
-  '/:orderId/status',
-  orderIdValidation,
-  updateOrderStatusValidation,
-  validateRequest,
-  updateOrderStatus
-);
-
-
-// Ship order (admin only)
-adminRouter.post(
-  '/:orderId/ship',
-  orderIdValidation,
-  validateRequest,
-  (req, res, next) => {
-    // Set the status to 'shipped' and pass to updateOrderStatus
-    req.body.status = 'shipped';
-    next();
-  },
-  updateOrderStatus
-);
-
-// Get order analytics (admin only)
-adminRouter.get(
-  '/analytics',
-  orderAnalyticsValidation,
-  validateRequest,
-  getOrderAnalytics
-);
-
-// Order invoice and returns (authenticated users)
 router.get(
   '/:orderId/invoice',
   authenticate,
@@ -146,77 +249,73 @@ router.get(
 router.post(
   '/:orderId/return',
   authenticate,
-  orderIdValidation,
   orderReturnValidation,
   validateRequest,
   requestReturn
 );
 
-// Order tracking (public endpoint)
 router.get(
-  '/track/:trackingNumber',
+  '/:orderId/track',
+  authenticate,
   orderTrackingValidation,
   validateRequest,
   trackOrder
 );
 
-// Admin order management
-adminRouter.post(
-  '/bulk-update-status',
-  bulkOrderStatusValidation,
+// Admin routes
+router.post(
+  '/admin/returns',
+  authenticate,
+  authorize,
   validateRequest,
-  bulkUpdateOrderStatus
+  listReturnRequests
 );
 
-adminRouter.get(
-  '/export',
-  orderExportValidation,
-  validateRequest,
-  exportOrders
+router.put(
+  '/admin/returns/:id/status',
+  authenticate,
+  authorize,
+  updateReturnStatus
 );
 
-// Refund endpoints
-adminRouter.post(
-  '/:orderId/refund',
-  orderIdValidation,
+router.post(
+  '/admin/orders/:id/refund',
+  authenticate,
+  authorize,
   orderRefundValidation,
   validateRequest,
   processRefund
 );
 
-// Return management
-adminRouter.get(
-  '/returns',
-  listReturnRequests
-);
-
-adminRouter.put(
-  '/returns/:returnId',
-  updateReturnStatus
-);
-
-// Order splitting
-adminRouter.post(
-  '/:orderId/split',
+router.post(
+  '/admin/orders/:id/split',
+  authenticate,
+  authorize,
   orderIdValidation,
   validateRequest,
   splitOrder
 );
 
-// Order notes
-adminRouter.post(
-  '/:orderId/notes',
-  orderIdValidation,
+router.post(
+  '/admin/orders/:id/notes',
+  authenticate,
+  authorize,
+  [
+    param('id').isMongoId().withMessage('Invalid order ID'),
+    body('note').isString().notEmpty().withMessage('Note is required'),
+    body('isInternal').optional().isBoolean().withMessage('isInternal must be a boolean')
+  ],
   validateRequest,
   addOrderNote
 );
 
-// Reports
-adminRouter.get(
-  '/reports/sales',
+router.get(
+  '/admin/reports/sales',
+  authenticate,
+  authorize,
+  orderAnalyticsValidation,
+  validateRequest,
   generateSalesReport
 );
 
-// Mount admin routes with /api/admin/orders prefix
-router.use('/admin/orders', adminRouter);
 export default router;
