@@ -79,14 +79,28 @@ export const bulkUpdateOrderStatus = async (req, res) => {
  */
 export const processRefund = async (req, res) => {
   try {
-    const { orderId } = req.params;
+    const orderId = req.params.id; // Changed from req.params.orderId to req.params.id
     const { amount, reason, refundMethod } = req.body;
+
+    console.log('Processing refund request:', {
+      orderId,
+      amount,
+      reason,
+      refundMethod,
+      params: req.params,
+      body: req.body
+    });
 
     const order = await Order.findById(orderId);
     if (!order) {
+      console.error('Order not found for refund:', { orderId });
       return res.status(404).json({
         success: false,
         error: 'Order not found',
+        details: {
+          orderId,
+          suggestion: 'Verify the order ID is correct and the order exists'
+        }
       });
     }
 
