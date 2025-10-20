@@ -225,14 +225,43 @@ export const listReturnRequests = async (req, res) => {
  */
 export const updateReturnStatus = async (req, res) => {
   try {
-    const { returnId } = req.params;
+    // Log the complete request for debugging
+    console.log('Request received - updateReturnStatus:', {
+      method: req.method,
+      url: req.originalUrl,
+      params: req.params,
+      query: req.query,
+      body: req.body,
+      headers: {
+        'content-type': req.get('content-type'),
+        'authorization': req.get('authorization') ? '***' : 'not provided'
+      }
+    });
+
+    // Get returnId from params and validate (using 'id' as parameter name to match route)
+    const returnId = req.params.id;
     const { status, notes } = req.body;
 
-    console.log('Updating return status:', { returnId, status, notes });
+    // Validate returnId
+    if (!returnId) {
+      console.error('Missing returnId in request:', { 
+        params: req.params,
+        body: req.body 
+      });
+      return res.status(400).json({
+        success: false,
+        error: 'Return ID is required',
+        details: {
+          receivedParams: Object.keys(req.params),
+          receivedQuery: Object.keys(req.query),
+          receivedBody: Object.keys(req.body)
+        }
+      });
+    }
 
     // Validate status
     const validStatuses = ['approved', 'rejected', 'processing', 'completed'];
-    if (!validStatuses.includes(status)) {
+    if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
         error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
@@ -256,21 +285,77 @@ export const updateReturnStatus = async (req, res) => {
       });
     }
 
+    // Debug: Log the request and order details
+    console.log('Debug - Request details:', {
+      method: req.method,
+      url: req.originalUrl,
+      body: req.body,
+      params: req.params,
+      query: req.query,
+      headers: {
+        'content-type': req.get('content-type'),
+        'authorization': req.get('authorization') ? '***' : 'not provided'
+      }
+    });
+    
+    // Debug: Log the order and return details
+    console.log('Debug - Order returns:', {
+      orderId: order._id,
+      orderReturnsCount: order.returns ? order.returns.length : 0,
+      searchingForReturnId: returnId,
+      allReturnIds: order.returns ? order.returns.map(r => ({
+        id: r.returnId,
+        type: typeof r.returnId,
+        status: r.status
+      })) : 'No returns array',
+      orderStatus: order.status,
+      orderTotal: order.totalAmount,
+      orderItems: order.items ? order.items.length : 0
+    });
+
     // Find the specific return in the order
-    const returnRequest = order.returns.find(r => r.returnId === returnId);
+    const returnRequest = order.returns ? order.returns.find(r => {
+      const match = r.returnId === returnId || 
+                   (r.returnId && r.returnId.toString() === returnId) ||
+                   (r._id && r._id.toString() === returnId);
+      if (match) {
+        console.log('Found matching return:', {
+          returnId: r.returnId,
+          _id: r._id,
+          status: r.status,
+          type: typeof r.returnId
+        });
+      }
+      return match;
+    }) : null;
+
     if (!returnRequest) {
       console.error('Return request not found in order:', {
         orderId: order._id,
         returnId,
-        availableReturns: order.returns ? order.returns.map(r => r.returnId) : 'none'
+        returnIdType: typeof returnId,
+        availableReturns: order.returns ? order.returns.map(r => ({
+          id: r.returnId,
+          type: typeof r.returnId,
+          _id: r._id,
+          status: r.status
+        })) : 'No returns array',
+        orderStatus: order.status,
+        orderTotal: order.totalAmount,
+        orderItems: order.items ? order.items.length : 0
       });
+      
       return res.status(404).json({
         success: false,
         error: 'Return request not found in order',
         details: {
           orderId: order._id,
           returnId,
-          availableReturns: order.returns ? order.returns.length : 0
+          returnIdType: typeof returnId,
+          availableReturns: order.returns ? order.returns.length : 0,
+          orderStatus: order.status,
+          orderItems: order.items ? order.items.length : 0,
+          suggestion: 'Check if the return ID is correct and the order has any return requests'
         }
       });
     }
@@ -279,6 +364,26 @@ export const updateReturnStatus = async (req, res) => {
     const previousStatus = returnRequest.status;
     returnRequest.status = status;
     returnRequest.updatedAt = new Date();
+    
+    // Update all item statuses to match the parent return status if they are in a request state
+    if (returnRequest.items && returnRequest.items.length > 0) {
+      returnRequest.items.forEach(item => {
+        // Only update status if it's in a request state
+        if (['requested', 'pending'].includes(item.status)) {
+          // Map the parent status to a valid item status
+          const statusMap = {
+            'approved': 'approved',
+            'rejected': 'rejected',
+            'processing': 'pending',
+            'completed': 'refunded',
+            'requested': 'pending'  // Default mapping for requested
+          };
+          
+          item.status = statusMap[status] || 'pending';
+          item.processedAt = new Date();
+        }
+      });
+    }
     
     // Add note if provided
     if (notes) {
@@ -332,8 +437,31 @@ export const updateReturnStatus = async (req, res) => {
  */
 export const splitOrder = async (req, res) => {
   try {
-    const { orderId } = req.params;
-    const { items } = req.body;
+    const { orderId, items } = req.body;
+    const { returnId, status, notes } = req.params;
+    
+    // Validate required parameters
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Order ID is required',
+        details: { received: { orderId } }
+      });
+    }
+    
+    if (!returnId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Return ID is required',
+        details: { 
+          received: { 
+            orderId,
+            returnId: returnId === undefined ? 'undefined' : returnId,
+            returnIdType: typeof returnId
+          }
+        }
+      });
+    }
 
     // Validate items
     if (!Array.isArray(items) || items.length === 0) {
