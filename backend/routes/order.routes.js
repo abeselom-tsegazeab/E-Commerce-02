@@ -288,20 +288,26 @@ router.post(
 );
 
 router.post(
-  '/admin/orders/:id/split',
+  '/admin/orders/:orderId/split',
   authenticate,
   authorize,
-  orderIdValidation,
+  [
+    param('orderId').isMongoId().withMessage('Invalid order ID format'),
+    body('items').isArray().withMessage('Items array is required'),
+    body('returnId').optional().isMongoId().withMessage('Invalid return ID format'),
+    body('status').optional().isString(),
+    body('notes').optional().isString()
+  ],
   validateRequest,
   splitOrder
 );
 
 router.post(
-  '/admin/orders/:id/notes',
+  '/admin/orders/:orderId/notes',
   authenticate,
   authorize,
   [
-    param('id').isMongoId().withMessage('Invalid order ID'),
+    param('orderId').isMongoId().withMessage('Invalid order ID'),
     body('note').isString().notEmpty().withMessage('Note is required'),
     body('isInternal').optional().isBoolean().withMessage('isInternal must be a boolean')
   ],

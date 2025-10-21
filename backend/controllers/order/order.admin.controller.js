@@ -450,42 +450,33 @@ export const updateReturnStatus = async (req, res) => {
  * @param {Object} res - Express response object
  */
 export const splitOrder = async (req, res) => {
+  let newOrder;
+  let order;
+  
   try {
-    const { orderId, items } = req.body;
-    const { returnId, status, notes } = req.params;
+    const { items, returnId, status, notes } = req.body;
+    const { orderId } = req.params;
     
     // Validate required parameters
-    if (!orderId) {
+    if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
-        error: 'Order ID is required',
-        details: { received: { orderId } }
-      });
-    }
-    
-    if (!returnId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Return ID is required',
-        details: { 
-          received: { 
-            orderId,
-            returnId: returnId === undefined ? 'undefined' : returnId,
-            returnIdType: typeof returnId
-          }
-        }
+        error: 'At least one item is required to split the order',
+        details: { received: { items } }
       });
     }
 
-    // Validate items
-    if (!Array.isArray(items) || items.length === 0) {
+    // If returnId is provided but invalid
+    if (returnId && !mongoose.Types.ObjectId.isValid(returnId)) {
       return res.status(400).json({
         success: false,
-        error: 'At least one item must be specified for the split',
+        error: 'Invalid return ID format',
+        details: { returnId }
       });
     }
 
-    const order = await Order.findById(orderId);
+    // Get the original order
+    order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -493,52 +484,146 @@ export const splitOrder = async (req, res) => {
       });
     }
 
-    // Create new order for the split items
-    const newOrder = new Order({
-      ...order.toObject(),
-      _id: undefined, // Let MongoDB generate a new ID
+    // Process items for the new order
+    const processedItems = [];
+    let subtotal = 0;
+    const movedProductIds = new Set();
+
+    // Debug: Log all items in the order with their IDs
+    console.log('Debug - Order items:');
+    order.items.forEach((item, index) => {
+      console.log(`Item ${index}:`, {
+        _id: item._id,
+        product: item.product,
+        productId: item.product?._id?.toString() || item.product?.toString(),
+        name: item.name,
+        quantity: item.quantity
+      });
+    });
+
+    for (const item of items) {
+      console.log('Processing request item:', item);
+      
+      // Try to find the order item by either orderItemId or productId
+      const orderItem = order.items.find(i => {
+        const productId = i.product?._id?.toString() || i.product?.toString();
+        const matchesProductId = item.productId && productId === item.productId.toString();
+        const matchesOrderItemId = item.orderItemId && i._id.toString() === item.orderItemId.toString();
+        
+        console.log('Checking order item:', {
+          itemId: i._id,
+          productId: productId,
+          matchesProductId,
+          matchesOrderItemId,
+          requestProductId: item.productId,
+          requestOrderItemId: item.orderItemId
+        });
+        
+        return matchesProductId || matchesOrderItemId;
+      });
+
+      if (!orderItem) {
+        console.error('Failed to find matching order item for:', item);
+        return res.status(400).json({
+          success: false,
+          error: `Could not find item with ID: ${item.orderItemId || item.productId} in the order`,
+          details: { 
+            item,
+            availableItems: order.items.map(i => ({
+              _id: i._id,
+              product: i.product?._id?.toString() || i.product?.toString(),
+              name: i.name
+            }))
+          }
+        });
+      }
+
+      // Validate quantity
+      const quantity = Math.min(item.quantity || 1, orderItem.quantity);
+      
+      processedItems.push({
+        product: orderItem.product,
+        name: orderItem.name,
+        quantity: quantity,
+        price: orderItem.price,
+        sku: orderItem.sku,
+        variant: orderItem.variant,
+        // Copy other relevant fields
+        ...(orderItem.weight && { weight: orderItem.weight }),
+        ...(orderItem.image && { image: orderItem.image })
+      });
+
+      // Track which product IDs we're moving to the new order
+      const productId = orderItem.product?._id?.toString() || orderItem.product?.toString();
+      if (productId) {
+        movedProductIds.add(productId);
+      }
+
+      subtotal += orderItem.price * quantity;
+    }
+
+    // Get the raw order object without mongoose magic
+    const orderObj = order.toObject();
+    
+    // Create a new object with only the fields we want to keep
+    const cleanOrder = {};
+    const fieldsToKeep = [
+      'user', 'items', 'totalAmount', 'status', 'paymentStatus',
+      'shippingAddress', 'trackingNumber', 'notes', 'isGuest', 'guestEmail',
+      'tax', 'shippingFee', 'discount', 'coupon', 'currency', 'metadata'
+    ];
+    
+    // Only copy the fields we explicitly want to keep
+    fieldsToKeep.forEach(field => {
+      if (orderObj[field] !== undefined) {
+        cleanOrder[field] = orderObj[field];
+      }
+    });
+    
+    // Create the new order with only the fields we want
+    newOrder = new Order({
+      ...cleanOrder,
       orderNumber: `SPLIT-${order.orderNumber}-${Date.now()}`,
       parentOrder: order._id,
-      status: 'processing',
-      items: items.map(item => ({
-        ...item,
-        price: order.items.find(i => i._id.toString() === item.orderItemId.toString())?.price || 0,
-      })),
-      subtotal: items.reduce((sum, item) => {
-        const orderItem = order.items.find(i => i._id.toString() === item.orderItemId.toString());
-        return sum + (orderItem?.price || 0) * item.quantity;
-      }, 0),
-      // Reset these as they'll be recalculated
-      shippingFee: 0,
-      tax: 0,
-      totalAmount: 0,
-      // Clear payment and shipping info
+      status: status || 'processing',
+      items: processedItems,
+      subtotal: subtotal,
+      // Reset payment and shipping info
       paymentStatus: 'pending',
       paymentMethod: null,
       paymentDetails: null,
       shipping: {},
+      // Reset financials
+      shippingFee: 0,
+      tax: 0,
+      totalAmount: subtotal, // Set total amount to subtotal since we reset other fees
       // Clear any existing returns/refunds
       returns: [],
       refunds: [],
       refundedAmount: 0,
+      // Explicitly set stripeSessionId to undefined to exclude it from the document
+      stripeSessionId: undefined,
     });
 
-    // Recalculate order totals
-    // Note: You might want to implement your own calculateOrderTotals function
-    // that handles taxes, shipping, etc.
+    console.log('New order to be created:', JSON.stringify(newOrder, null, 2));
+    
+    // Save the new order
     await newOrder.save();
-
-    // Update original order to remove split items
-    order.items = order.items.filter(
-      item => !items.some(splitItem => splitItem.orderItemId === item._id.toString())
-    );
+    console.log('New order created successfully:', newOrder._id);
     
-    // Recalculate original order totals
+    // Update the original order to remove the moved items
+    order.items = order.items.filter(item => {
+      const productId = item.product?._id?.toString() || item.product?.toString();
+      return !movedProductIds.has(productId);
+    });
+    
+    // Recalculate the original order's subtotal
     order.subtotal = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    // Recalculate other totals (tax, shipping, etc.)
-    // ...
+    order.totalAmount = order.subtotal + (order.shippingFee || 0) + (order.tax || 0) - (order.discount || 0);
     
+    // Save the updated original order
     await order.save();
+    console.log('Original order updated successfully');
 
     res.status(201).json({
       success: true,
@@ -550,9 +635,21 @@ export const splitOrder = async (req, res) => {
     });
   } catch (error) {
     console.error('Error splitting order:', error);
+    
+    // If we have a new order but something went wrong, try to clean it up
+    if (newOrder && newOrder._id) {
+      try {
+        await Order.findByIdAndDelete(newOrder._id);
+        console.log('Cleaned up partially created order:', newOrder._id);
+      } catch (cleanupError) {
+        console.error('Error cleaning up after failed order split:', cleanupError);
+      }
+    }
+    
     res.status(500).json({
       success: false,
       error: 'Failed to split order',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -574,6 +671,7 @@ export const addOrderNote = async (req, res) => {
       });
     }
 
+    // First, get the order to check if it exists
     const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({
@@ -582,24 +680,59 @@ export const addOrderNote = async (req, res) => {
       });
     }
 
-    // Initialize notes array if it doesn't exist
-    order.notes = order.notes || [];
-    
-    // Add new note
-    order.notes.push({
-      note: note.trim(),
+    // Create a new note object
+    const newNote = {
+      text: note.trim(),
       addedBy: req.user._id,
       isCustomerVisible: Boolean(isCustomerVisible),
-      addedAt: new Date(),
-    });
+      createdAt: new Date()
+    };
 
-    await order.save();
+    // If there are no returns yet, create an empty one
+    if (!order.returns || order.returns.length === 0) {
+      order.returns = [{
+        status: 'requested',
+        notes: [newNote],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }];
+    } else {
+      // Add note to the most recent return
+      const lastReturn = order.returns[order.returns.length - 1];
+      if (!lastReturn.notes) {
+        lastReturn.notes = [];
+      }
+      lastReturn.notes.push(newNote);
+      lastReturn.updatedAt = new Date();
+    }
+
+    // Save the order with the new note
+    const updatedOrder = await order.save();
+    
+    // Get the most recently added note (should be the one we just added)
+    const addedNote = updatedOrder.returns
+      .flatMap(r => r.notes || [])
+      .reverse()
+      .find(n => n.text === newNote.text);
+
+    if (!addedNote) {
+      console.error('Failed to find the newly added note in the saved order');
+      // Still return success but with a warning
+      return res.status(201).json({
+        success: true,
+        warning: 'Note was added but could not be verified',
+        data: {
+          noteId: 'unknown',
+          addedAt: new Date().toISOString(),
+        },
+      });
+    }
 
     res.status(201).json({
       success: true,
       data: {
-        noteId: order.notes[order.notes.length - 1]._id,
-        addedAt: order.notes[order.notes.length - 1].addedAt,
+        noteId: addedNote._id || 'unknown',
+        addedAt: addedNote.createdAt || new Date().toISOString(),
       },
     });
   } catch (error) {
@@ -607,6 +740,7 @@ export const addOrderNote = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to add order note',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
