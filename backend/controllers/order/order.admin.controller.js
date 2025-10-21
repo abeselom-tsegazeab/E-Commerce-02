@@ -752,56 +752,171 @@ export const addOrderNote = async (req, res) => {
  */
 export const generateSalesReport = async (req, res) => {
   try {
-    const { startDate, endDate, groupBy = 'day', format = 'json' } = req.query;
+    // Default to current year if no dates provided
+    const currentYear = new Date().getFullYear();
+    const defaultStartDate = new Date(`${currentYear}-01-01`);
+    const defaultEndDate = new Date(`${currentYear}-12-31`);
     
-    // Build date range query
-    const dateQuery = {};
-    if (startDate) dateQuery.$gte = new Date(startDate);
-    if (endDate) dateQuery.$lte = new Date(endDate);
+    // Get query parameters with defaults
+    const startDate = req.query.startDate ? new Date(req.query.startDate) : defaultStartDate;
+    const endDate = req.query.endDate ? new Date(req.query.endDate) : defaultEndDate;
+    const groupBy = req.query.groupBy || 'day';
+    
+    // Validate dates
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid date format. Please use YYYY-MM-DD',
+      });
+    }
 
-    // Grouping logic
-    let groupStage = {};
-    const dateFormat = {
-      day: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-      week: { $dateToString: { format: '%Y-%U', date: '$createdAt' } },
-      month: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
-      year: { $dateToString: { format: '%Y', date: '$createdAt' } },
-    }[groupBy] || '$createdAt';
+    // Set end of day for end date
+    endDate.setHours(23, 59, 59, 999);
 
-    // Aggregate sales data
-    const salesData = await Order.aggregate([
+    // Grouping configuration
+    const dateFormats = {
+      day: { 
+        format: '%Y-%m-%d',
+        groupId: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+        sortFormat: '%Y%m%d'
+      },
+      week: { 
+        format: '%Y-W%U',
+        groupId: { $dateToString: { format: '%Y-%U', date: '$createdAt' } },
+        sortFormat: '%Y%U'
+      },
+      month: { 
+        format: '%Y-%m',
+        groupId: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+        sortFormat: '%Y%m'
+      },
+      year: { 
+        format: '%Y',
+        groupId: { $dateToString: { format: '%Y', date: '$createdAt' } },
+        sortFormat: '%Y'
+      },
+    };
+
+    const dateConfig = dateFormats[groupBy] || dateFormats.day;
+
+    // Aggregate pipeline
+    const pipeline = [
       {
         $match: {
           status: { $in: ['completed', 'delivered'] },
-          ...(Object.keys(dateQuery).length > 0 && { createdAt: dateQuery }),
-        },
+          createdAt: { $gte: startDate, $lte: endDate },
+          paymentStatus: { $ne: 'refunded' } // Exclude refunded orders
+        }
       },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-          date: { $first: dateFormat },
+          _id: dateConfig.groupId,
+          date: { $first: { $dateToString: { format: dateConfig.format, date: '$createdAt' } } },
           totalSales: { $sum: '$totalAmount' },
           orderCount: { $sum: 1 },
           averageOrderValue: { $avg: '$totalAmount' },
-        },
+          productCount: { $sum: { $size: '$items' } },
+          taxCollected: { $sum: '$tax' },
+          shippingCollected: { $sum: '$shippingFee' },
+          discountAmount: { $sum: '$discount' },
+          orders: {
+            $push: {
+              orderId: '$_id',
+              total: '$totalAmount',
+              items: '$items',
+              createdAt: '$createdAt'
+            }
+          }
+        }
       },
-      { $sort: { _id: 1 } },
-    ]);
+      {
+        $project: {
+          _id: 0,
+          date: 1,
+          totalSales: { $round: ['$totalSales', 2] },
+          orderCount: 1,
+          averageOrderValue: { $round: ['$averageOrderValue', 2] },
+          productCount: 1,
+          taxCollected: { $round: ['$taxCollected', 2] },
+          shippingCollected: { $round: ['$shippingCollected', 2] },
+          discountAmount: { $round: ['$discountAmount', 2] },
+          netSales: {
+            $round: [
+              { $subtract: [
+                '$totalSales',
+                { $add: ['$taxCollected', '$shippingCollected'] }
+              ] },
+              2
+            ]
+          },
+          orders: 1
+        }
+      },
+      {
+        $sort: { date: 1 }
+      }
+    ];
 
-    // Format response based on requested format
-    if (format.toLowerCase() === 'csv') {
+    // Execute aggregation
+    const salesData = await Order.aggregate(pipeline);
+
+    // Calculate totals
+    const totals = salesData.reduce((acc, curr) => ({
+      totalSales: (acc.totalSales || 0) + (curr.totalSales || 0),
+      orderCount: (acc.orderCount || 0) + (curr.orderCount || 0),
+      productCount: (acc.productCount || 0) + (curr.productCount || 0),
+      taxCollected: (acc.taxCollected || 0) + (curr.taxCollected || 0),
+      shippingCollected: (acc.shippingCollected || 0) + (curr.shippingCollected || 0),
+      discountAmount: (acc.discountAmount || 0) + (curr.discountAmount || 0),
+      netSales: (acc.netSales || 0) + (curr.netSales || 0)
+    }), {});
+
+    // Add average order value to totals
+    totals.averageOrderValue = totals.orderCount > 0 
+      ? parseFloat((totals.totalSales / totals.orderCount).toFixed(2))
+      : 0;
+
+    // Format response
+    const response = {
+      success: true,
+      data: salesData,
+      meta: {
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+        groupBy,
+        ...totals
+      }
+    };
+
+    // Handle CSV format if requested
+    if (req.query.format === 'csv') {
       // Convert to CSV
-      const header = Object.keys(salesData[0] || {}).join(',');
-      const rows = salesData.map(item => 
-        Object.values(item).map(field => 
-          typeof field === 'string' ? `"${field.replace(/"/g, '""')}"` : field
-        ).join(',')
-      );
-      const csv = [header, ...rows].join('\n');
+      if (salesData.length === 0) {
+        return res.status(200).send('No data available for the selected period');
+      }
       
+      // Create CSV header
+      const fields = Object.keys(salesData[0]).filter(field => field !== 'orders');
+      let csv = fields.join(',') + '\n';
+      
+      // Add rows
+      salesData.forEach(item => {
+        const row = fields.map(field => {
+          const value = item[field];
+          // Handle nested objects and arrays
+          if (typeof value === 'object') {
+            return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
+          }
+          return `"${value}"`;
+        });
+        csv += row.join(',') + '\n';
+      });
+      
+      // Set headers for CSV download
+      res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename="sales-report-${new Date().toISOString().split('T')[0]}.csv"`);
-      return res.send(csv);
+      return res.status(200).send(csv);
     }
 
     // Default to JSON

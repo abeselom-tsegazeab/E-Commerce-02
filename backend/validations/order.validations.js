@@ -1,4 +1,5 @@
 import { body, param, query } from 'express-validator';
+import mongoose from 'mongoose';
 
 // Validation for order items
 const orderItemValidation = [
@@ -46,6 +47,22 @@ export const createOrderValidation = [
 export const orderIdValidation = [
   param('orderId')
     .isMongoId().withMessage('Invalid order ID format')
+];
+
+// Validation for bulk order operations
+export const bulkOrderValidation = [
+  body('orderIds')
+    .isArray({ min: 1 }).withMessage('At least one order ID is required')
+    .custom((orderIds) => {
+      if (!Array.isArray(orderIds)) {
+        throw new Error('orderIds must be an array');
+      }
+      const isValid = orderIds.every(id => mongoose.Types.ObjectId.isValid(id));
+      if (!isValid) {
+        throw new Error('One or more order IDs are invalid');
+      }
+      return true;
+    })
 ];
 
 // Validation for order status update
