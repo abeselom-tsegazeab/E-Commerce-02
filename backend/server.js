@@ -59,7 +59,7 @@ import alertRoutes from './routes/product/alert.routes.js';
 import importExportRoutes from './routes/product/importExport.routes.js';
 import { connectDB } from './lib/db.js';
 import orderRoutes from './routes/order.routes.js';
-
+import categoryRoutes from './routes/category.routes.js';
 // Import Passport configuration
 import passport from './lib/passport.js';
 import sessionMiddleware from './config/session.config.js';
@@ -131,6 +131,10 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/attributes', attributeRoutes);
 app.use('/api/reviews', reviewRoutes);
+
+// Category routes
+app.use('/api/categories', categoryRoutes);
+
 
 // Product related routes
 app.use('/api/products', bulkRoutes);

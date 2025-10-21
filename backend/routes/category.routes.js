@@ -15,8 +15,8 @@ import {
   categoryIdValidation
 } from '../validations/category.validations.js';
 import { validate } from '../middleware/validate.middleware.js';
-import { auth, admin } from '../middleware/auth.middleware.js';
-import upload from '../middleware/upload.middleware.js';
+import { protectRoute as auth, adminRoute as admin } from '../middleware/auth.middleware.js';
+import { uploadSingle } from '../middleware/upload.middleware.js';
 
 const router = express.Router();
 
@@ -31,7 +31,7 @@ router.use(auth);
 router.use(admin);
 
 // Handle file upload for category image (single file)
-const uploadCategoryImage = upload.single('image');
+const uploadCategoryImage = uploadSingle('image');
 
 // Create category with image upload
 router.post(

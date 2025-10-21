@@ -1,5 +1,5 @@
 import Category from '../models/category.model.js';
-import { uploadToCloudinary } from '../utils/cloudinary.js';
+import { uploadImage as uploadToCloudinary } from '../lib/cloudinary.js';
 import slugify from 'slugify';
 
 // Helper function to build category hierarchy
