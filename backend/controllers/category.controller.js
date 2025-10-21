@@ -2,8 +2,14 @@ import Category from '../models/category.model.js';
 import { uploadImage as uploadToCloudinary } from '../lib/cloudinary.js';
 import slugify from 'slugify';
 
-// Helper function to build category hierarchy
-const buildCategoryTree = (categories, parentId = null) => {
+// Helper function to build category hierarchy with depth limit
+const buildCategoryTree = (categories, parentId = null, depth = 0, maxDepth = 10) => {
+  // Prevent infinite recursion
+  if (depth > maxDepth) {
+    console.warn(`Maximum category depth (${maxDepth}) reached. Possible circular reference detected.`);
+    return [];
+  }
+
   const categoryList = [];
   let filteredCategories = categories;
   
@@ -16,9 +22,9 @@ const buildCategoryTree = (categories, parentId = null) => {
   }
 
   for (const category of filteredCategories) {
-    const children = buildCategoryTree(categories, category._id);
+    const children = buildCategoryTree(categories, category._id, depth + 1, maxDepth);
     categoryList.push({
-      ...category.toObject(),
+      ...category,
       children: children.length ? children : undefined
     });
   }
@@ -97,7 +103,8 @@ export const createCategory = async (req, res) => {
 // Get all categories
 export const getCategories = async (req, res) => {
   try {
-    const { tree, status, search, page = 1, limit = 100 } = req.query;
+    console.log('Fetching categories with query:', req.query);
+    const { tree, status, search, page = 1, limit = 10 } = req.query;
     
     const query = {};
     
@@ -114,12 +121,16 @@ export const getCategories = async (req, res) => {
       ];
     }
 
+    console.log('Built query:', query);
+
     // For tree view
     if (tree) {
+      console.log('Fetching category tree...');
       const categories = await Category.find(query)
         .sort({ order: 1, name: 1 })
         .lean();
       
+      console.log(`Found ${categories.length} categories for tree view`);
       const categoryTree = buildCategoryTree(categories);
       return res.json({ 
         success: true, 
@@ -127,30 +138,70 @@ export const getCategories = async (req, res) => {
       });
     }
 
-    // For paginated list
-    const options = {
-      page: parseInt(page, 10),
-      limit: parseInt(limit, 10),
-      sort: { order: 1, name: 1 },
-      populate: { path: 'parent', select: 'name slug' }
-    };
-
-    const result = await Category.paginate(query, options);
+    console.log('Fetching paginated categories...');
     
+    // For paginated list - first get total count
+    const total = await Category.countDocuments(query);
+    const totalPages = Math.ceil(total / limit);
+    const skip = (page - 1) * limit;
+
+    console.log(`Total categories: ${total}, Pages: ${totalPages}, Skip: ${skip}`);
+    
+    // Get paginated results
+    const categories = await Category.find(query)
+      .sort({ order: 1, name: 1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    console.log(`Fetched ${categories.length} categories`);
+    
+    // If no categories found, return empty array
+    if (!categories.length) {
+      return res.json({
+        success: true,
+        data: [],
+        pagination: {
+          total: 0,
+          pages: 0,
+          page: parseInt(page),
+          limit: parseInt(limit)
+        }
+      });
+    }
+
+    // Get parent category details for each category
+    const categoriesWithParents = await Promise.all(
+      categories.map(async (category) => {
+        if (!category.parent) return category;
+        
+        const parent = await Category.findById(category.parent)
+          .select('name slug')
+          .lean();
+        
+        return {
+          ...category,
+          parent
+        };
+      })
+    );
+
     res.json({
       success: true,
-      data: result.docs,
+      data: categoriesWithParents,
       pagination: {
-        total: result.totalDocs,
-        pages: result.totalPages,
-        page: result.page,
-        limit: result.limit
+        total,
+        pages: totalPages,
+        page: parseInt(page),
+        limit: parseInt(limit)
       }
     });
   } catch (error) {
+    console.error('Error in getCategories:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };

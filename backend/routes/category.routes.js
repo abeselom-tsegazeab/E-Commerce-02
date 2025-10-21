@@ -20,14 +20,14 @@ import { uploadSingle } from '../middleware/upload.middleware.js';
 
 const router = express.Router();
 
-// Public routes
+// Public routes - no authentication required
 router.get('/', getCategoriesValidation, validate, getCategories);
 router.get('/:id', categoryIdValidation, validate, getCategory);
 
 // Protected routes (require authentication)
 router.use(auth);
 
-// Admin routes
+// Admin routes (require admin privileges)
 router.use(admin);
 
 // Handle file upload for category image (single file)
