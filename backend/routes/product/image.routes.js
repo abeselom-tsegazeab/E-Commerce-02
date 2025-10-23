@@ -42,41 +42,43 @@ const upload = multer({
 // Apply authentication middleware to all routes
 router.use(protectRoute);
 
-// Apply admin middleware to all routes (only admins can modify product images)
-router.use(adminRoute);
-
-// Add images to product
+// Add images to product (admin only)
 router.post(
   '/',
+  adminRoute,
   upload.array('images', 10), // 'images' is the field name, max 10 files
   validate(addImagesValidation),
   addProductImages
 );
 
-// Update image details
+// Update product image (admin only)
 router.put(
   '/:imageId',
+  adminRoute,
   validate(updateImageValidation),
   updateProductImage
 );
 
-// Delete an image
+// Delete product image (admin only)
 router.delete(
   '/:imageId',
+  adminRoute,
   validate(deleteImageValidation),
   deleteProductImage
 );
 
-// Set primary image
+// Set primary image (admin only)
 router.patch(
   '/:imageId/primary',
+  adminRoute,
   validate(setPrimaryImageValidation),
   setPrimaryImage
 );
 
-// Reorder images
+// Reorder images (admin only)
 router.patch(
   '/reorder',
+  adminRoute,
   validate(reorderImagesValidation),
   reorderImages
 );

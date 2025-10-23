@@ -120,25 +120,32 @@ export const protectRoute = async (req, res, next) => {
             });
 
             // 6. Attach user to request object for subsequent middleware
-            // Convert Mongoose document to plain JavaScript object
+            // Convert Mongoose document to plain JavaScript object and include _id
             const userObject = user.toObject ? user.toObject() : user;
             
-            // Attach a clean user object to the request
-            req.user = {
-                id: userObject._id || userObject.id,
+            // Ensure we have a valid _id
+            if (!userObject._id) {
+                console.error('User object is missing _id:', userObject);
+                return res.status(500).json({
+                    success: false,
+                    message: 'Internal server error - Invalid user data'
+                });
+            }
+            
+            // Create a clean user object with _id as a string
+            const cleanUser = {
+                _id: userObject._id.toString(),
                 email: userObject.email,
                 role: userObject.role,
-                // Add any other fields you need
                 ...(userObject.name && { name: userObject.name }),
                 ...(userObject.phone && { phone: userObject.phone })
             };
+            
+            // Attach the clean user object to the request
+            req.user = cleanUser;
 
             // Log the attached user for debugging
-            console.log('User attached to request:', {
-                id: req.user.id,
-                email: req.user.email,
-                role: req.user.role
-            });
+            console.log('User attached to request:', cleanUser);
 
             // 7. Proceed to the next middleware
             next();
