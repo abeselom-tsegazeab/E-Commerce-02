@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Product from '../../models/product.model.js';
 import Category from '../../models/category.model.js';
 import Brand from '../../models/brand.model.js';
@@ -108,14 +109,31 @@ const getFeaturedProductsFromDB = async (limit = 10) => {
     return JSON.parse(cachedProducts);
   }
   
+  // Debug: Log the query
+  console.log('Fetching featured products with query:', {
+    isFeatured: true,
+    isActive: true
+  });
+  
   // Get from database
   const products = await Product.find({
     isFeatured: true,
-    status: 'active'
+    isActive: true
   })
   .sort('-createdAt')
   .limit(limit)
   .lean();
+  
+  // Debug: Log the results
+  console.log('Found featured products:', products.length);
+  if (products.length > 0) {
+    console.log('First product:', {
+      _id: products[0]._id,
+      name: products[0].name,
+      isFeatured: products[0].isFeatured,
+      isActive: products[0].isActive
+    });
+  }
   
   // Cache the results
   await redis.setex(cacheKey, CACHE_TTL.FEATURED_PRODUCTS, JSON.stringify(products));
@@ -145,10 +163,24 @@ const searchProductsInDB = async ({
     ];
   }
   
-  // Category filter (handle ObjectId)
+  // Category filter (handle both ID and name)
   if (category) {
     if (mongoose.Types.ObjectId.isValid(category)) {
+      // If it's a valid ObjectId, search by ID
       searchQuery.category = new mongoose.Types.ObjectId(category);
+    } else {
+      // Otherwise, search by category name (case-insensitive)
+      const categories = await Category.find({
+        name: { $regex: new RegExp(`^${category}$`, 'i') },
+        isActive: true
+      }).select('_id');
+      
+      if (categories.length > 0) {
+        searchQuery.category = { $in: categories.map(cat => cat._id) };
+      } else {
+        // If no matching category found, return empty results
+        return { products: [], total: 0, totalPages: 0 };
+      }
     }
   }
   
@@ -304,11 +336,27 @@ const getProductsByIdsFromDB = async (ids) => {
   if (!Array.isArray(ids) || ids.length === 0) {
     return [];
   }
-  
-  return Product.find({
-    _id: { $in: ids },
-    status: 'active'
-  }).lean();
+
+  // Validate and convert string IDs to ObjectId
+  const validIds = ids
+    .filter(id => id && typeof id === 'string' && mongoose.Types.ObjectId.isValid(id))
+    .map(id => new mongoose.Types.ObjectId(id));
+
+  if (validIds.length === 0) {
+    return [];
+  }
+
+  try {
+    return await Product.find({
+      _id: { $in: validIds },
+      isActive: true
+    })
+    .select('-__v -createdAt -updatedAt')  // Exclude unnecessary fields
+    .lean();
+  } catch (error) {
+    console.error('Error in getProductsByIdsFromDB:', error);
+    return [];
+  }
 };
 
 // Export all service functions

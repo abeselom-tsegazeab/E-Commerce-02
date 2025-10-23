@@ -575,27 +575,60 @@ export const getProductsByIds = async (req, res) => {
   try {
     const { ids } = req.body;
     
+    // This validation is now handled by the middleware, but kept as a safety check
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Product IDs are required'
+        message: 'At least one product ID is required',
+        field: 'ids',
+        example: { "ids": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"] }
       });
     }
     
     const products = await getProductsByIdsService(ids);
     
+    // If no products found, check if it's because they don't exist or are inactive
+    if (products.length === 0) {
+      // Check if any of the products exist but are inactive
+      const existingProducts = await Product.countDocuments({ 
+        _id: { $in: ids } 
+      });
+      
+      if (existingProducts > 0) {
+        return res.status(200).json({
+          success: true,
+          count: 0,
+          data: [],
+          message: 'No active products found with the provided IDs',
+          foundInactive: true
+        });
+      }
+      
+      return res.status(404).json({
+        success: false,
+        message: 'No products found with the provided IDs',
+        ids,
+        example: { "ids": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"] }
+      });
+    }
+    
     res.status(200).json({
       success: true,
       count: products.length,
-      data: products
+      data: products,
+      foundAll: products.length === ids.length,
+      missingIds: products.length < ids.length 
+        ? ids.filter(id => !products.some(p => p._id.toString() === id))
+        : undefined
     });
     
   } catch (error) {
     console.error('Error fetching products by IDs:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching products',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Failed to fetch products',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };

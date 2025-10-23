@@ -1,4 +1,5 @@
 import express from 'express';
+import Product from '../models/product.model.js';
 import { 
   createProduct,
   getAllProducts,
@@ -24,13 +25,14 @@ import bulkRoutes from './product/bulk.routes.js';
 import comparisonRoutes from './product/comparison.routes.js';
 import alertRoutes from './product/alert.routes.js';
 import {
-  validateProductData,productIdValidation as
-  validateProductId,
+  validateProductData,
+  productIdValidation as validateProductId,
   validateProductSearch,
   validateVariantData,
-  validateBulkOperation,updateInventoryValidation as
-  validateInventoryUpdate,
-  getProductValidation
+  validateBulkOperation,
+  updateInventoryValidation as validateInventoryUpdate,
+  getProductValidation,
+  validateBatchProducts
 } from '../validations/product.validations.js';
 import { protectRoute as auth, adminRoute as admin } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.middleware.js';
@@ -52,9 +54,33 @@ router.patch(
   validate(validateVariantData), 
   updateProductVariants
 );
-router.post('/batch', getProductsByIds);
+router.post(
+  '/batch',
+  validate(validateBatchProducts),
+  getProductsByIds
+);
 
 // Mount review routes
+// Debug endpoint to check product status
+router.get('/debug/status', async (req, res) => {
+  try {
+    const products = await Product.find({}).limit(5).select('name isFeatured isActive status');
+    const count = await Product.countDocuments({ isFeatured: true, isActive: true });
+    
+    res.json({
+      success: true,
+      totalProducts: await Product.countDocuments(),
+      featuredAndActiveCount: count,
+      sampleProducts: products
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 router.use('/:productId/reviews', reviewRoutes);
 
 // Mount image routes

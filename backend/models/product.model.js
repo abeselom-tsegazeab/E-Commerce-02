@@ -1,5 +1,17 @@
 import mongoose from "mongoose";
 import mongoosePaginate from 'mongoose-paginate-v2';
+import slugify from 'slugify';
+
+// Function to create a unique slug
+const createSlug = async function(name, model, counter = 0) {
+  const baseSlug = slugify(name, { lower: true, strict: true });
+  const slug = counter === 0 ? baseSlug : `${baseSlug}-${counter}`;
+  
+  const existing = await model.findOne({ slug });
+  if (!existing) return slug;
+  
+  return createSlug(name, model, counter + 1);
+};
 
 const productSchema = new mongoose.Schema(
   {
@@ -11,7 +23,6 @@ const productSchema = new mongoose.Schema(
     },
     slug: {
       type: String,
-      required: true,
       unique: true,
       lowercase: true,
       index: true
@@ -225,9 +236,15 @@ productSchema.pre('save', function(next) {
   next();
 });
 
-// Add pagination plugin to the schema
+// Add pre-save middleware to generate slug
+productSchema.pre('save', async function(next) {
+  if (this.isModified('name') || !this.slug) {
+    this.slug = await createSlug(this.name, this.constructor);
+  }
+  next();
+});
+
+// Add pagination plugin
 productSchema.plugin(mongoosePaginate);
 
-const Product = mongoose.model("Product", productSchema);
-
-export default Product;
+export default mongoose.model('Product', productSchema);
