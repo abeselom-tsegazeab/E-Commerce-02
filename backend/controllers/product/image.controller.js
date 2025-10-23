@@ -144,43 +144,95 @@ export const updateProductImage = async (req, res) => {
 // Delete product image
 export const deleteProductImage = async (req, res) => {
   try {
-    const { id, imageId } = req.params;
+    const { id: productId, imageId } = req.params;
     
-    // First get the image to delete
-    const product = await Product.findById(id);
+    console.log(`Deleting image ${imageId} from product ${productId}`);
+    
+    // First get the product to delete the image from
+    const product = await Product.findById(productId).select('images');
     if (!product) {
+      console.log(`Product not found with ID: ${productId}`);
       return res.status(404).json({
         success: false,
         message: 'Product not found'
       });
     }
 
-    const imageToDelete = product.images.id(imageId);
+    console.log(`Product found. Current images:`, product.images.map(img => ({
+      _id: img._id,
+      publicId: img.publicId,
+      url: img.url
+    })));
+
+    // Try to find the image by _id (MongoDB ObjectId) first
+    let imageToDelete = product.images.id(imageId);
+    
+    // If not found by _id, try to find by publicId (UUID) or by URL
     if (!imageToDelete) {
-      return res.status(404).json({
-        success: false,
-        message: 'Image not found'
-      });
+      imageToDelete = product.images.find(img => 
+        (img.publicId && img.publicId === imageId) || // Match by publicId if it exists
+        (img.url && img.url.includes(imageId)) // Or match by URL if it contains the imageId
+      );
+      
+      // If still not found, return error
+      if (!imageToDelete) {
+        console.log(`Image ${imageId} not found in product ${productId}`);
+        return res.status(404).json({
+          success: false,
+          message: 'Image not found in the specified product',
+          details: {
+            productId,
+            imageId,
+            availableImageIds: product.images.map(img => ({
+              _id: img._id.toString(),
+              publicId: img.publicId,
+              url: img.url
+            }))
+          }
+        });
+      }
     }
 
-    // Delete from Cloudinary
-    if (imageToDelete.publicId) {
-      await deleteFromCloudinary(imageToDelete.publicId);
+    console.log(`Found image to delete:`, {
+      _id: imageToDelete._id,
+      publicId: imageToDelete.publicId,
+      url: imageToDelete.url
+    });
+
+    // Delete from Cloudinary if publicId exists and is a valid string
+    if (imageToDelete.publicId && typeof imageToDelete.publicId === 'string') {
+      try {
+        console.log(`Deleting image from Cloudinary: ${imageToDelete.publicId}`);
+        await deleteFromCloudinary(imageToDelete.publicId);
+        console.log('Successfully deleted from Cloudinary');
+      } catch (cloudinaryError) {
+        console.error('Error deleting from Cloudinary:', cloudinaryError);
+        // Continue with local deletion even if Cloudinary deletion fails
+      }
+    } else {
+      console.log('No valid publicId found, skipping Cloudinary deletion');
     }
 
     // Remove from product
+    const wasPrimary = imageToDelete.isPrimary;
     product.images.pull({ _id: imageId });
     
     // If we deleted the primary image and there are other images, set the first one as primary
-    if (imageToDelete.isPrimary && product.images.length > 0) {
+    if (wasPrimary && product.images.length > 0) {
+      console.log('Setting new primary image');
       product.images[0].isPrimary = true;
     }
     
     await product.save();
+    console.log('Image removed from product successfully');
 
     res.json({
       success: true,
-      message: 'Image deleted successfully'
+      message: 'Image deleted successfully',
+      data: {
+        deletedImageId: imageId,
+        newPrimaryImage: wasPrimary && product.images[0] ? product.images[0]._id : null
+      }
     });
   } catch (error) {
     console.error('Error deleting product image:', error);

@@ -7,7 +7,19 @@ import { validationResult } from 'express-validator';
  */
 export const validate = (validations) => {
   return async (req, res, next) => {
-    await Promise.all(validations.map(validation => validation.run(req)));
+    // If validations is a function, it's a single validation chain
+    if (typeof validations === 'function') {
+      await validations.run(req);
+    } 
+    // If validations is an array, run all validations
+    else if (Array.isArray(validations)) {
+      await Promise.all(validations.map(validation => {
+        if (typeof validation === 'function') {
+          return validation.run ? validation.run(req) : validation(req, res, () => {});
+        }
+        return Promise.resolve();
+      }));
+    }
 
     const errors = validationResult(req);
     if (errors.isEmpty()) {

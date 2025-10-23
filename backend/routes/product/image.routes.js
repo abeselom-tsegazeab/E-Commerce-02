@@ -42,6 +42,32 @@ const upload = multer({
 // Apply authentication middleware to all routes
 router.use(protectRoute);
 
+// Reorder product images (admin only)
+router.patch(
+  '/sort',
+  adminRoute,
+  // Add express.json() with specific options to ensure proper parsing
+  express.json({ type: 'application/json' }),
+  // Custom middleware to ensure body is properly parsed
+  (req, res, next) => {
+    try {
+      // If body is a string, try to parse it as JSON
+      if (typeof req.body === 'string') {
+        req.body = JSON.parse(req.body);
+      }
+      next();
+    } catch (error) {
+      console.error('Error parsing JSON:', error);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid JSON in request body'
+      });
+    }
+  },
+  validate(reorderImagesValidation),
+  reorderImages
+);
+
 // Add images to product (admin only)
 router.post(
   '/',

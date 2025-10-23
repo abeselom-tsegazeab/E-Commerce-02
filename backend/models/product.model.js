@@ -3,14 +3,33 @@ import mongoosePaginate from 'mongoose-paginate-v2';
 import slugify from 'slugify';
 
 // Function to create a unique slug
-const createSlug = async function(name, model, counter = 0) {
-  const baseSlug = slugify(name, { lower: true, strict: true });
+const createSlug = async function(name, model, productId = null, counter = 0) {
+  // Handle undefined or null name
+  if (!name) {
+    const randomString = Math.random().toString(36).substring(2, 8);
+    name = `product-${randomString}`;
+  }
+  
+  // Ensure name is a string
+  const nameStr = String(name).trim();
+  const baseSlug = slugify(nameStr, { lower: true, strict: true }) || 'product';
   const slug = counter === 0 ? baseSlug : `${baseSlug}-${counter}`;
   
-  const existing = await model.findOne({ slug });
-  if (!existing) return slug;
-  
-  return createSlug(name, model, counter + 1);
+  try {
+    const query = { slug };
+    if (productId) {
+      query._id = { $ne: productId };
+    }
+    
+    const existing = await model.findOne(query);
+    if (!existing) return slug;
+    
+    return createSlug(name, model, productId, counter + 1);
+  } catch (error) {
+    console.error('Error in createSlug:', error);
+    // Return a fallback slug if there's an error
+    return `${baseSlug}-${Date.now()}`;
+  }
 };
 
 const productSchema = new mongoose.Schema(
@@ -217,13 +236,17 @@ productSchema.index({
 });
 
 // Create slug from name before saving
-productSchema.pre('save', function(next) {
-  if (this.isModified('name')) {
-    this.slug = this.name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-');
+productSchema.pre('save', async function(next) {
+  try {
+    // Only generate slug if name is modified or slug is not set
+    if (this.isModified('name') || !this.slug) {
+      const Product = this.constructor;
+      this.slug = await createSlug(this.name, Product, this._id);
+    }
+  } catch (error) {
+    console.error('Error generating slug:', error);
+    // Generate a fallback slug if there's an error
+    this.slug = `product-${Date.now()}`;
   }
   next();
 });
