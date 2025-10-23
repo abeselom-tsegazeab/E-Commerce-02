@@ -21,8 +21,19 @@ import { uploadSingle } from '../middleware/upload.middleware.js';
 const router = express.Router();
 
 // Public routes - no authentication required
-router.get('/', getCategoriesValidation, validate, getCategories);
-router.get('/:id', categoryIdValidation, validate, getCategory);
+router.get('/', 
+  (req, res, next) => {
+    console.log('GET /api/categories', {
+      query: req.query,
+      params: req.params
+    });
+    next();
+  },
+  validate(getCategoriesValidation),  // Pass validation rules here
+  getCategories
+);
+
+router.get('/:id', validate(categoryIdValidation), getCategory);
 
 // Protected routes (require authentication)
 router.use(auth);
@@ -37,8 +48,7 @@ const uploadCategoryImage = uploadSingle('image');
 router.post(
   '/',
   uploadCategoryImage,
-  createCategoryValidation,
-  validate,
+  validate(createCategoryValidation),  // Pass validation rules here
   createCategory
 );
 
@@ -46,24 +56,21 @@ router.post(
 router.put(
   '/:id',
   uploadCategoryImage,
-  updateCategoryValidation,
-  validate,
+  validate(updateCategoryValidation),
   updateCategory
 );
 
 // Delete category
 router.delete(
   '/:id',
-  categoryIdValidation,
-  validate,
+  validate(categoryIdValidation),
   deleteCategory
 );
 
 // Reorder categories
 router.post(
   '/reorder',
-  reorderCategoriesValidation,
-  validate,
+  validate(reorderCategoriesValidation),
   reorderCategories
 );
 

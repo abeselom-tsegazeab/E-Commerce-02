@@ -135,7 +135,6 @@ app.use('/api/reviews', reviewRoutes);
 // Category routes
 app.use('/api/categories', categoryRoutes);
 
-
 // Product related routes
 app.use('/api/products', bulkRoutes);
 app.use('/api/products', comparisonRoutes);

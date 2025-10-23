@@ -103,109 +103,76 @@ export const createCategory = async (req, res) => {
 // Get all categories
 export const getCategories = async (req, res) => {
   try {
-    console.log('Fetching categories with query:', req.query);
-    const { tree, status, search, page = 1, limit = 10 } = req.query;
+    console.log('getCategories called with query:', req.query);
     
+    // Default values
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Build query
     const query = {};
     
-    // Filter by status if provided
-    if (status) {
-      query.isActive = status === 'active';
-    }
-    
-    // Search functionality
-    if (search) {
+    // Apply filters if provided
+    if (req.query.search) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { name: { $regex: req.query.search, $options: 'i' } },
+        { description: { $regex: req.query.search, $options: 'i' } }
       ];
     }
 
-    console.log('Built query:', query);
-
-    // For tree view
-    if (tree) {
-      console.log('Fetching category tree...');
-      const categories = await Category.find(query)
-        .sort({ order: 1, name: 1 })
-        .lean();
-      
-      console.log(`Found ${categories.length} categories for tree view`);
-      const categoryTree = buildCategoryTree(categories);
-      return res.json({ 
-        success: true, 
-        data: categoryTree 
-      });
+    if (req.query.status) {
+      query.isActive = req.query.status === 'active';
     }
 
-    console.log('Fetching paginated categories...');
-    
-    // For paginated list - first get total count
+    // Get total count
     const total = await Category.countDocuments(query);
-    const totalPages = Math.ceil(total / limit);
-    const skip = (page - 1) * limit;
+    const totalPages = Math.ceil(total / limit) || 1;
 
-    console.log(`Total categories: ${total}, Pages: ${totalPages}, Skip: ${skip}`);
-    
-    // Get paginated results
-    const categories = await Category.find(query)
-      .sort({ order: 1, name: 1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
-
-    console.log(`Fetched ${categories.length} categories`);
-    
-    // If no categories found, return empty array
-    if (!categories.length) {
+    // If no categories found, return empty response
+    if (total === 0) {
       return res.json({
         success: true,
         data: [],
         pagination: {
           total: 0,
           pages: 0,
-          page: parseInt(page),
-          limit: parseInt(limit)
+          page,
+          limit,
+          hasMore: false
         }
       });
     }
 
-    // Get parent category details for each category
-    const categoriesWithParents = await Promise.all(
-      categories.map(async (category) => {
-        if (!category.parent) return category;
-        
-        const parent = await Category.findById(category.parent)
-          .select('name slug')
-          .lean();
-        
-        return {
-          ...category,
-          parent
-        };
-      })
-    );
+    // Get categories with pagination
+    const categories = await Category.find(query)
+      .sort({ [req.query.sort || 'name']: req.query.order === 'desc' ? -1 : 1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     res.json({
       success: true,
-      data: categoriesWithParents,
+      data: categories,
       pagination: {
         total,
         pages: totalPages,
-        page: parseInt(page),
-        limit: parseInt(limit)
+        page,
+        limit,
+        hasMore: page < totalPages
       }
     });
+
   } catch (error) {
     console.error('Error in getCategories:', error);
     res.status(500).json({
       success: false,
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      message: 'Error fetching categories',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
-
+   
 // Get single category
 export const getCategory = async (req, res) => {
   try {
