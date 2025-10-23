@@ -53,7 +53,7 @@ router.post(
 );
 
 // Mount review routes (these have their own auth middleware)
-router.use('/:productId/reviews', reviewRoutes);
+router.use('/reviews', reviewRoutes);
 
 // Mount image routes (these have their own auth middleware)
 router.use('/:id/images', imageRoutes);
@@ -61,7 +61,10 @@ router.use('/:id/images', imageRoutes);
 // Mount stats routes (these have their own auth middleware)
 router.use('', statsRoutes);
 
-// Debug endpoint to check product status (public)
+// Apply auth middleware to all routes that require authentication
+router.use(auth);
+
+// Debug endpoint to check product status (protected route)
 router.get('/debug/status', async (req, res) => {
   try {
     const products = await Product.find({}).limit(5).select('name isFeatured isActive status');
@@ -80,9 +83,6 @@ router.get('/debug/status', async (req, res) => {
     });
   }
 });
-
-// Protected routes (require authentication)
-router.use(auth);
 
 // Admin routes (require admin privileges)
 router.patch(

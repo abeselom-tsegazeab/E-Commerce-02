@@ -21,24 +21,21 @@ import { validate } from '../middleware/validate.middleware.js';
 const router = express.Router({ mergeParams: true });
 
 // Helper function to create routes for both URL patterns
-const createRoutes = (pathSuffix, handlers) => {
+const createRoutes = (pathSuffix, ...middleware) => {
   const basePath = `reviews/:reviewId/${pathSuffix}`;
-  
-  // Convert single handler to array if needed
-  const handlerArray = Array.isArray(handlers) ? handlers : [handlers];
   
   // Handle /api/products/reviews/:reviewId/helpful
   router.post(
     `/${basePath}`,
     validateReviewId,
-    ...handlerArray
+    ...middleware
   );
   
   // Handle /api/products/:productId/reviews/:reviewId/helpful
   router.post(
     `/:productId/${basePath}`,
     validateReviewId,
-    ...handlerArray
+    ...middleware
   );
 };
 
@@ -57,14 +54,22 @@ router.get(
   getReviewStats
 );
 
+// Apply protectRoute middleware to all routes below this point
+router.use(protectRoute);
+
 // Mark review as helpful (protected route)
-createRoutes('helpful', [protectRoute, markHelpful]);
+router.post(
+  '/:reviewId/helpful',
+  validateReviewId,
+  markHelpful
+);
 
 // Mark review as not helpful (protected route)
-createRoutes('not-helpful', [protectRoute, markNotHelpful]);
-
-// Protected routes (require authentication)
-router.use(protectRoute);
+router.post(
+  '/:reviewId/not-helpful',
+  validateReviewId,
+  markNotHelpful
+);
 
 // Create review (protected route)
 router.post(
