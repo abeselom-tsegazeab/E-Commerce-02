@@ -23,7 +23,7 @@ export const getWishlist = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const addToWishlist = asyncHandler(async (req, res) => {
-  const { productId, notes, priority, customFields } = req.body;
+  const { productId, notes, priority, customFields, quantity } = req.body;
   
   // Validate product exists
   const product = await Product.findById(productId);
@@ -43,7 +43,12 @@ export const addToWishlist = asyncHandler(async (req, res) => {
   }
   
   // Add item to wishlist
-  await wishlist.addItem(productId, { notes, priority, customFields });
+  await wishlist.addItem(productId, { 
+    notes, 
+    priority, 
+    customFields, 
+    quantity: quantity || 1 
+  });
   
   // Populate product details
   const updatedWishlist = await Wishlist.findById(wishlist._id)
@@ -90,7 +95,7 @@ export const removeFromWishlist = asyncHandler(async (req, res) => {
  */
 export const updateWishlistItem = asyncHandler(async (req, res) => {
   const { productId } = req.params;
-  const { notes, priority, customFields } = req.body;
+  const { notes, priority, customFields, quantity } = req.body;
   
   const wishlist = await Wishlist.findOne({ user: req.user._id });
   
@@ -111,11 +116,25 @@ export const updateWishlistItem = asyncHandler(async (req, res) => {
   // Update item fields
   if (notes !== undefined) wishlist.items[itemIndex].notes = notes;
   if (priority) wishlist.items[itemIndex].priority = priority;
-  if (customFields) {
-    wishlist.items[itemIndex].customFields = {
-      ...wishlist.items[itemIndex].customFields,
-      ...customFields
-    };
+  if (quantity !== undefined) {
+    wishlist.items[itemIndex].quantity = Math.max(1, parseInt(quantity, 10) || 1);
+  }
+  
+  // Handle customFields update for Map type
+  if (customFields && typeof customFields === 'object') {
+    // Clear existing customFields if we want to replace them completely
+    // Or keep existing ones if we want to merge
+    if (Object.keys(customFields).length > 0) {
+      // Initialize as a new Map if it doesn't exist
+      if (!(wishlist.items[itemIndex].customFields instanceof Map)) {
+        wishlist.items[itemIndex].customFields = new Map();
+      }
+      
+      // Set each custom field in the Map
+      Object.entries(customFields).forEach(([key, value]) => {
+        wishlist.items[itemIndex].customFields.set(key, value);
+      });
+    }
   }
   
   await wishlist.save();

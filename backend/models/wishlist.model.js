@@ -24,6 +24,11 @@ const wishlistItemSchema = new mongoose.Schema({
     type: Map,
     of: String,
     default: {}
+  },
+  quantity: {
+    type: Number,
+    default: 1,
+    min: 1
   }
 });
 
@@ -78,27 +83,32 @@ wishlistSchema.methods.addItem = async function(productId, options = {}) {
 
   if (existingItemIndex >= 0) {
     // Update existing item
-    this.items[existingItemIndex].addedAt = new Date();
-    if (options.notes) this.items[existingItemIndex].notes = options.notes;
-    if (options.priority) this.items[existingItemIndex].priority = options.priority;
-    if (options.customFields) {
-      this.items[existingItemIndex].customFields = {
-        ...this.items[existingItemIndex].customFields,
-        ...options.customFields
-      };
+    const item = this.items[existingItemIndex];
+    if (options.notes !== undefined) item.notes = options.notes;
+    if (options.priority) item.priority = options.priority;
+    if (options.quantity !== undefined) {
+      item.quantity = Math.max(1, parseInt(options.quantity, 10) || 1);
     }
-    return this.save();
+    if (options.customFields) {
+      if (!(item.customFields instanceof Map)) {
+        item.customFields = new Map();
+      }
+      Object.entries(options.customFields).forEach(([key, value]) => {
+        item.customFields.set(key, value);
+      });
+    }
+  } else {
+    // Add new item
+    this.items.push({
+      product: productId,
+      notes: options.notes,
+      priority: options.priority || 'medium',
+      quantity: Math.max(1, parseInt(options.quantity, 10) || 1),
+      customFields: options.customFields || {}
+    });
   }
 
-  // Add new item
-  const newItem = {
-    product: productId,
-    notes: options.notes || '',
-    priority: options.priority || 'medium',
-    customFields: options.customFields || {}
-  };
-
-  this.items.push(newItem);
+  this.updatedAt = Date.now();
   return this.save();
 };
 
