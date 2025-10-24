@@ -214,4 +214,124 @@ export const getComparableAttributes = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Add product to comparison
+// @route   POST /api/compare/add
+// @access  Private
+// @desc    Remove product from comparison
+// @route   DELETE /api/compare/remove
+// @access  Private
+export const removeFromComparison = async (req, res) => {
+  console.log('=== removeFromComparison controller STARTED ===');
+  console.log('1. Request body:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { productId } = req.body;
+    console.log('2. Extracted productId:', productId);
+    
+    if (!productId) {
+      console.error('3. Error: No productId in request body');
+      return res.status(400).json({
+        success: false,
+        message: 'productId is required in request body'
+      });
+    }
+    
+    // In a real implementation, you would:
+    // 1. Get user ID from req.user (from auth middleware)
+    // 2. Remove the product from user's comparison list in the database
+    // 3. Return the updated comparison list
+    
+    console.log('4. Product removed from comparison:', productId);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Product removed from comparison',
+      productId: productId
+    });
+    
+  } catch (error) {
+    console.error('Error in removeFromComparison:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error removing product from comparison',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// @desc    Add product to comparison
+// @route   POST /api/compare/add
+// @access  Private
+export const addToComparison = async (req, res) => {
+  console.log('=== addToComparison controller STARTED ===');
+  console.log('1. Entering addToComparison with body:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { productId } = req.body;
+    console.log('2. Extracted productId:', productId);
+    
+    if (!productId) {
+      console.error('3. Error: No productId in request body');
+      return res.status(400).json({
+        success: false,
+        message: 'productId is required in request body'
+      });
+    }
+    
+    // Verify product exists
+    console.log('4. Looking up product in database:', productId);
+    try {
+      const product = await Product.findById(productId)
+        .select('name price comparePrice description images')
+        .lean()
+        .exec();
+      
+      console.log('5. Product lookup result:', product ? 'Found' : 'Not found');
+      
+      if (!product) {
+        console.log('6. Product not found:', productId);
+        return res.status(404).json({
+          success: false,
+          message: 'Product not found'
+        });
+      }
+      
+      // In a real implementation, you would:
+      // 1. Get user ID from req.user (from auth middleware)
+      // 2. Add the product to user's comparison list in the database
+      // 3. Return the updated comparison list
+      
+      const response = {
+        success: true,
+        message: 'Product added to comparison',
+        product: {
+          _id: product._id,
+          name: product.name,
+          price: product.price,
+          comparePrice: product.comparePrice,
+          description: product.description,
+          image: product.images?.[0]?.url || null
+        }
+      };
+      
+      console.log('7. Sending success response');
+      return res.status(200).json(response);
+      
+    } catch (dbError) {
+      console.error('8. Database error:', dbError);
+      throw dbError;
+    }
+    
+    
+  } catch (error) {
+    console.error('Error in addToComparison:', error);
+    const errorResponse = {
+      success: false,
+      message: 'Error adding product to comparison',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    };
+    console.error('Error response:', errorResponse);
+    return res.status(500).json(errorResponse);
+  }
+};
 

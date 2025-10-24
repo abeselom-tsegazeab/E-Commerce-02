@@ -140,11 +140,8 @@ app.use('/api/products', bulkRoutes);
 app.use('/api/products', alertRoutes);
 app.use('/api/products', importExportRoutes);
 
-// Mount comparison routes with logging
-app.use('/api/compare', (req, res, next) => {
-  console.log('Comparison route hit:', req.originalUrl);
-  next();
-}, comparisonRoutes);
+// Mount comparison routes
+app.use('/api/compare', comparisonRoutes);
 
 // Mount order routes
 app.use('/api/orders', orderRoutes);
