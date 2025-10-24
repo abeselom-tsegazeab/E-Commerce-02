@@ -137,14 +137,23 @@ app.use('/api/categories', categoryRoutes);
 
 // Product related routes
 app.use('/api/products', bulkRoutes);
-app.use('/api/products', comparisonRoutes);
 app.use('/api/products', alertRoutes);
 app.use('/api/products', importExportRoutes);
 
+// Mount comparison routes with logging
+app.use('/api/compare', (req, res, next) => {
+  console.log('Comparison route hit:', req.originalUrl);
+  next();
+}, comparisonRoutes);
 
 // Mount order routes
 app.use('/api/orders', orderRoutes);
-app.use('/api/', orderRoutes);
+
+// Add catch-all route for debugging
+app.use('/api/*', (req, res, next) => {
+  console.log('Catch-all route hit:', req.originalUrl);
+  next(new Error('Endpoint not found'));
+});
 
 
 // Production static files
