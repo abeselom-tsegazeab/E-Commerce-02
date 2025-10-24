@@ -2,8 +2,9 @@ import express from 'express';
 import { 
   addToCart, 
   getCartProducts, 
-  removeAllFromCart, 
-  updateQuantity 
+  clearCart, 
+  updateQuantity,
+  removeFromCart
 } from '../controllers/cart.controller.js';
 import { protectRoute } from '../middleware/auth.middleware.js';
 
@@ -106,6 +107,65 @@ router.put('/:id', protectRoute, updateQuantity);
  *   "message": "Cart cleared successfully"
  * }
  */
-router.delete('/', protectRoute, removeAllFromCart);
+router.delete('/clear', protectRoute, clearCart);
+
+/**
+ * @route   DELETE /api/cart/items/:productId
+ * @desc    Remove a specific item from cart by product ID
+ * @access  Private
+ * @header  {string}  Authorization  Bearer token
+ * @param   {string}  productId  ID of the product to remove
+ * @returns {Object}  Success message
+ * 
+ * @response {Object} 200 - Item removed successfully
+ * @response {Object} 404 - Item not found in cart
+ * @response {Object} 401 - Unauthorized
+ * 
+ * @example
+ * // Request
+ * DELETE /api/cart/items/68f240151fdfa7b511bc74b0
+ * 
+ * // Response
+ * {
+ *   "success": true,
+ *   "message": "Item removed from cart"
+ * }
+ */
+/**
+ * @route   DELETE /api/cart/:productId
+ * @desc    Remove a specific item from cart by product ID
+ * @access  Private
+ * @header  {string}  Authorization  Bearer token
+ * @param   {string}  productId  ID of the product to remove
+ * @returns {Object}  Success message with updated cart
+ * 
+ * @response {Object} 200 - Item removed successfully
+ * @response {Object} 404 - Item not found in cart
+ * @response {Object} 401 - Unauthorized
+ * 
+ * @example
+ * // Request
+ * DELETE /api/cart/68f240151fdfa7b511bc74b0
+ * 
+ * // Response
+ * {
+ *   "success": true,
+ *   "message": "Item removed from cart",
+ *   "data": {
+ *     "cartSummary": {
+ *       "subtotal": 99.99,
+ *       "totalItems": 2,
+ *       "shipping": 0,
+ *       "discount": 0,
+ *       "total": 99.99,
+ *       "currency": "USD"
+ *     },
+ *     "cartItems": [
+ *       // Remaining cart items
+ *     ]
+ *   }
+ * }
+ */
+router.delete('/:productId', protectRoute, removeFromCart);
 
 export default router;
