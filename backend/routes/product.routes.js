@@ -142,7 +142,7 @@ router.post(
 // Mount bulk routes
 router.use('/bulk', bulkRoutes);
 
-// Mount alert routes
-router.use('/alerts', alertRoutes);
+// Mount alert routes directly under product routes
+router.use('/', alertRoutes);
 
 export default router;

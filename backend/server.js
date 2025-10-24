@@ -46,6 +46,8 @@ import mongoose from 'mongoose';
 import authRoutes from './routes/auth.route.js';
 import socialAuthRoutes from './routes/socialAuth.route.js';
 import productRoutes from './routes/product.routes.js';
+import alertRoutes from './routes/alert.routes.js';
+import productAlertRoutes from './routes/product/alert.routes.js';
 import cartRoutes from './routes/cart.routes.js';
 import couponRoutes from './routes/coupon.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
@@ -55,7 +57,6 @@ import attributeRoutes from './routes/attribute.routes.js';
 import reviewRoutes from './routes/review.routes.js';
 import bulkRoutes from './routes/product/bulk.routes.js';
 import comparisonRoutes from './routes/product/comparison.routes.js';
-import alertRoutes from './routes/product/alert.routes.js';
 import importExportRoutes from './routes/product/importExport.routes.js';
 import { connectDB } from './lib/db.js';
 import orderRoutes from './routes/order.routes.js';
@@ -135,6 +136,18 @@ app.use('/api/products/bulk', bulkRoutes);
 
 // Mount other product routes
 app.use('/api/products', productRoutes);
+
+// Mount product-specific alert routes
+app.use('/api/products', productAlertRoutes);
+
+// Mount main alert routes
+app.use('/api/alerts', alertRoutes);
+
+// Test endpoint at root
+app.get('/api/test', (req, res) => {
+  console.log('Root test endpoint hit');
+  res.json({ success: true, message: 'Root test endpoint working' });
+});
 
 // Direct route for bulk delete (temporary for debugging)
 import { protectRoute, adminRoute } from './middleware/auth.middleware.js';

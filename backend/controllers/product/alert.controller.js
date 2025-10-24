@@ -5,35 +5,62 @@ import Product from '../../models/product.model.js';
 // @route   POST /api/products/:id/alert
 // @access  Private
 export const subscribeToStockAlert = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user._id;
+  try {
+    console.log('subscribeToStockAlert called with params:', req.params);
+    console.log('User ID:', req.user?._id);
+    
+    const { id } = req.params;
+    const userId = req.user._id;
 
-  const product = await Product.findById(id);
-  
-  if (!product) {
-    res.status(404);
-    throw new Error('Product not found');
-  }
-
-  // Check if user is already subscribed
-  if (product.watchingUsers.includes(userId)) {
-    res.status(400);
-    throw new Error('You are already subscribed to stock alerts for this product');
-  }
-
-  // Add user to watchingUsers array
-  product.watchingUsers.push(userId);
-  await product.save();
-
-  res.json({
-    success: true,
-    message: 'You will be notified when this product is back in stock',
-    data: {
-      productId: product._id,
-      productName: product.name,
-      isInStock: product.inventory.quantity > 0
+    console.log('Finding product with ID:', id);
+    const product = await Product.findById(id);
+    
+    if (!product) {
+      console.log('Product not found');
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Product not found' 
+      });
     }
-  });
+
+    console.log('Product found:', product.name);
+    console.log('Checking if user is already subscribed...');
+
+    // Check if user is already subscribed
+    if (product.watchingUsers && product.watchingUsers.includes(userId)) {
+      console.log('User already subscribed');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'You are already subscribed to stock alerts for this product' 
+      });
+    }
+
+    console.log('Adding user to watchingUsers array...');
+    // Add user to watchingUsers array
+    if (!product.watchingUsers) {
+      product.watchingUsers = [];
+    }
+    product.watchingUsers.push(userId);
+    await product.save();
+
+    console.log('Subscription successful');
+    return res.json({
+      success: true,
+      message: 'You will be notified when this product is back in stock',
+      data: {
+        productId: product._id,
+        productName: product.name,
+        isInStock: product.inventory?.quantity > 0 || false
+      }
+    });
+  } catch (error) {
+    console.error('Error in subscribeToStockAlert:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error',
+      error: error.message 
+    });
+  }
 });
 
 // @desc    Check for low stock products

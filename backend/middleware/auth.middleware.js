@@ -237,12 +237,113 @@ export const optionalAuth = async (req, res, next) => {
 };
 
 /**
+ * Simple Authentication Middleware (no admin check)
+ * 
+ * Verifies JWT token and attaches user to request without checking roles
+ * 
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+export const simpleAuth = async (req, res, next) => {
+    console.log('=== SIMPLE AUTH MIDDLEWARE ===');
+    console.log(`Request URL: ${req.method} ${req.originalUrl}`);
+    console.log('Headers:', {
+        authorization: req.headers.authorization ? '*** Present ***' : 'Not present',
+        cookie: req.headers.cookie ? '*** Present ***' : 'Not present'
+    });
+    
+    try {
+        // 1. Extract token from Authorization header or cookies
+        let token;
+        
+        // Check Authorization header first
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1];
+            console.log('Token found in Authorization header');
+        } 
+        // Then check cookies
+        else if (req.cookies?.accessToken) {
+            token = req.cookies.accessToken;
+            console.log('Token found in cookies');
+        } else {
+            console.log('No token found in headers or cookies');
+            res.status(401).json({
+                success: false,
+                message: 'Not authorized, no token provided'
+            });
+            return;
+        }
+
+        console.log('Verifying token...');
+        
+        // 2. Verify token using ACCESS_TOKEN_SECRET
+        const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+        console.log('Token verified. Decoded:', {
+            userId: decoded.userId,
+            iat: new Date(decoded.iat * 1000).toISOString(),
+            exp: new Date(decoded.exp * 1000).toISOString(),
+            now: new Date().toISOString()
+        });
+        
+        // 3. Get user from the token
+        console.log('Looking up user with ID:', decoded.userId);
+        const user = await User.findById(decoded.userId).select('-password');
+        
+        if (!user) {
+            console.log('User not found in database');
+            return res.status(401).json({
+                success: false,
+                message: 'Not authorized, user not found'
+            });
+        }
+
+        console.log('User found:', {
+            id: user._id,
+            email: user.email,
+            role: user.role
+        });
+
+        // 4. Attach user to request object
+        req.user = user;
+        console.log('User attached to request. Proceeding to next middleware...');
+        next();
+    } catch (error) {
+        console.error('Authentication error:', {
+            name: error.name,
+            message: error.message,
+            expiredAt: error.expiredAt,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+        
+        if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({
+                success: false,
+                message: 'Session expired, please log in again'
+            });
+        }
+        
+        res.status(401).json({
+            success: false,
+            message: 'Not authorized',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
  * Role-Based Access Control (RBAC) Middleware
  * 
  * Restricts access to users with specific roles
  * 
  * @param {string[]} allowedRoles - Array of role names that are allowed
  * @returns {Function} - Middleware function
+ */
+
+/**
+ * Role-Based Access Control (RBAC) Middleware
+ * Restricts access to users with specific roles
  */
 export const roleCheck = (allowedRoles = []) => {
     return (req, res, next) => {
