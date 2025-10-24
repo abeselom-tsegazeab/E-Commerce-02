@@ -131,11 +131,18 @@ router.patch(
   updateProductInventory
 );
 
+// Bulk operations
 router.post(
   '/bulk',
   admin,
   validate(validateBulkOperation),
   bulkUpdateProducts
 );
+
+// Mount bulk routes
+router.use('/bulk', bulkRoutes);
+
+// Mount alert routes
+router.use('/alerts', alertRoutes);
 
 export default router;

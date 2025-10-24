@@ -123,7 +123,56 @@ app.use(passport.session());
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', socialAuthRoutes);
+
+// Add debug logging for all requests
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+// Mount bulk routes first to avoid conflicts
+app.use('/api/products/bulk', bulkRoutes);
+
+// Mount other product routes
 app.use('/api/products', productRoutes);
+
+// Direct route for bulk delete (temporary for debugging)
+import { protectRoute, adminRoute } from './middleware/auth.middleware.js';
+import { bulkDeleteValidation } from './validations/bulk.validations.js';
+import { bulkDeleteProducts } from './controllers/product/bulk.controller.js';
+
+// Convert bulkDeleteValidation array to middleware functions
+const bulkDeleteValidationMiddleware = (req, res, next) => {
+  return Promise.all(bulkDeleteValidation.map(validation => 
+    new Promise((resolve) => {
+      validation(req, res, (err) => {
+        resolve(err);
+      });
+    })
+  )).then(errors => {
+    const error = errors.find(e => e);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: error.message || 'Validation failed'
+      });
+    }
+    next();
+  }).catch(next);
+};
+
+app.delete('/api/products/bulk/delete', 
+  (req, res, next) => {
+    console.log('Direct bulk delete route hit');
+    next();
+  },
+  protectRoute,
+  adminRoute,
+  bulkDeleteValidationMiddleware,
+  bulkDeleteProducts
+);
+
+// Other routes
 app.use('/api/cart', cartRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/payments', paymentRoutes);
@@ -134,10 +183,6 @@ app.use('/api/reviews', reviewRoutes);
 
 // Category routes
 app.use('/api/categories', categoryRoutes);
-
-// Product related routes
-app.use('/api/products', bulkRoutes);
-app.use('/api/products', alertRoutes);
 app.use('/api/products', importExportRoutes);
 
 // Mount comparison routes

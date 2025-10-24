@@ -1,30 +1,58 @@
 import asyncHandler from 'express-async-handler';
+import mongoose from 'mongoose';
 import Product from '../../models/product.model.js';
 import { validateBulkUpdate } from '../../validations/product.validations.js';
 
 // @desc    Bulk update product status
-// @route   PUT /api/products/bulk/status
+// @route   PUT /api/products/status
+// @route   POST /api/products/status
 // @access  Private/Admin
 export const bulkUpdateStatus = asyncHandler(async (req, res) => {
   const { productIds, isActive } = req.body;
-  
-  const { error } = validateBulkUpdate({ productIds, updates: { isActive } });
-  if (error) {
+
+  // Validate input
+  if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
     res.status(400);
-    throw new Error(error.details[0].message);
+    throw new Error('Please provide an array of product IDs');
   }
 
-  const result = await Product.updateMany(
-    { _id: { $in: productIds } },
-    { $set: { isActive } },
-    { runValidators: true }
-  );
+  // Convert all IDs to ObjectId and validate
+  const objectIds = [];
+  for (const id of productIds) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400);
+      throw new Error(`Invalid product ID: ${id}`);
+    }
+    objectIds.push(new mongoose.Types.ObjectId(id));
+  }
 
-  res.json({
-    success: true,
-    message: `Updated status for ${result.nModified} products`,
-    data: result
-  });
+  // Validate isActive is a boolean
+  if (typeof isActive !== 'boolean') {
+    res.status(400);
+    throw new Error('isActive must be a boolean value');
+  }
+
+  try {
+    const result = await Product.updateMany(
+      { _id: { $in: objectIds } },
+      { $set: { isActive } },
+      { runValidators: true }
+    );
+
+    res.json({
+      success: true,
+      message: `Updated status for ${result.modifiedCount} products`,
+      data: {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount,
+        acknowledged: result.acknowledged
+      }
+    });
+  } catch (error) {
+    console.error('Error in bulkUpdateStatus:', error);
+    res.status(500);
+    throw new Error('Failed to update product status');
+  }
 });
 
 // @desc    Bulk update product categories
@@ -130,13 +158,22 @@ export const bulkUpdatePrices = asyncHandler(async (req, res) => {
 export const bulkDeleteProducts = asyncHandler(async (req, res) => {
   const { productIds } = req.body;
   
-  const { error } = validateBulkUpdate({ productIds, updates: {} });
-  if (error) {
+  if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
     res.status(400);
-    throw new Error(error.details[0].message);
+    throw new Error('Product IDs are required and must be a non-empty array');
   }
 
-  const result = await Product.deleteMany({ _id: { $in: productIds } });
+  // Convert all IDs to ObjectId and validate
+  const objectIds = [];
+  for (const id of productIds) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400);
+      throw new Error(`Invalid product ID: ${id}`);
+    }
+    objectIds.push(new mongoose.Types.ObjectId(id));
+  }
+
+  const result = await Product.deleteMany({ _id: { $in: objectIds } });
 
   res.json({
     success: true,

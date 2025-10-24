@@ -32,17 +32,30 @@ export const validateBulkUpdate = ({ productIds, updates }) => {
 
 // Validation for bulk status update
 export const bulkStatusValidation = [
+  (req, res, next) => {
+    console.log('Validating bulk status update:', req.body);
+    next();
+  },
   body('productIds')
+    .exists().withMessage('productIds is required')
     .isArray({ min: 1 }).withMessage('At least one product ID is required')
     .custom((value) => {
-      if (!value.every(id => mongoose.Types.ObjectId.isValid(id))) {
-        throw new Error('All product IDs must be valid');
+      if (!Array.isArray(value)) {
+        throw new Error('productIds must be an array');
+      }
+      if (value.length === 0) {
+        throw new Error('At least one product ID is required');
+      }
+      const invalidIds = value.filter(id => !mongoose.Types.ObjectId.isValid(id));
+      if (invalidIds.length > 0) {
+        throw new Error(`Invalid product IDs: ${invalidIds.join(', ')}`);
       }
       return true;
     }),
-    
   body('isActive')
+    .exists().withMessage('isActive is required')
     .isBoolean().withMessage('isActive must be a boolean value')
+    .toBoolean()
 ];
 
 // Validation for bulk category update
