@@ -48,6 +48,7 @@ import socialAuthRoutes from './routes/socialAuth.route.js';
 import productRoutes from './routes/product.routes.js';
 import alertRoutes from './routes/alert.routes.js';
 import productAlertRoutes from './routes/product/alert.routes.js';
+import paymentRoutes from './routes/payment.routes.js';
 import cartRoutes from './routes/cart.routes.js';
 import couponRoutes from './routes/coupon.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
@@ -185,7 +186,7 @@ app.delete('/api/products/bulk/delete',
   bulkDeleteProducts
 );
 
-// Other routes
+// Other routes 
 app.use('/api/cart', cartRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/payments', paymentRoutes);

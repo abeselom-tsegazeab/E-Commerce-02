@@ -1,9 +1,13 @@
 import express from 'express';
 import { protectRoute } from '../middleware/auth.middleware.js';
 import { 
+  createPaymentIntent,
+  handleWebhook,
+  getPaymentStatus,
   checkoutSuccess, 
   createCheckoutSession 
 } from '../controllers/payment.controller.js';
+import bodyParser from 'body-parser';
 
 /**
  * Payment Routes
@@ -14,6 +18,87 @@ import {
  */
 
 const router = express.Router();
+
+/**
+ * @route   POST /api/payments/create-payment-intent
+ * @desc    Create a payment intent for an order
+ * @access  Private
+ * @header  {string}  Authorization  Bearer token
+ * @body    {string}  orderId        ID of the order to pay for
+ * 
+ * @response {Object} 200 - Payment intent created successfully
+ * @response {Object} 400 - Invalid request data
+ * @response {Object} 401 - Unauthorized
+ * @response {Object} 403 - Forbidden (order doesn't belong to user)
+ * @response {Object} 404 - Order not found
+ * 
+ * @example
+ * // Request body
+ * {
+ *   "orderId": "60d21b4667d0d8992e610c85"
+ * }
+ * 
+ * // Success response
+ * {
+ *   "success": true,
+ *   "clientSecret": "pi_3Nk..._secret_...",
+ *   "orderId": "60d21b4667d0d8992e610c85",
+ *   "amount": 9999,
+ *   "currency": "usd"
+ * }
+ */
+router.post('/create-payment-intent', protectRoute, createPaymentIntent);
+
+/**
+ * @route   POST /api/payments/webhook
+ * @desc    Handle Stripe webhook events
+ * @access  Public (Stripe needs to access this endpoint)
+ * 
+ * @response {Object} 200 - Webhook received successfully
+ * 
+ * @note This endpoint should be configured in your Stripe Dashboard to receive events
+ */
+router.post('/webhook', 
+  // Stripe needs the raw body to verify the webhook signature
+  bodyParser.raw({ type: 'application/json' }), 
+  handleWebhook
+);
+
+/**
+ * @route   GET /api/payments/order/:orderId/status
+ * @desc    Get payment status for an order
+ * @access  Private
+ * @header  {string}  Authorization  Bearer token
+ * @param   {string}  orderId        ID of the order to check
+ * 
+ * @response {Object} 200 - Payment status retrieved successfully
+ * @response {Object} 401 - Unauthorized
+ * @response {Object} 403 - Forbidden (order doesn't belong to user)
+ * @response {Object} 404 - Order not found
+ * 
+ * @example
+ * // Success response
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "orderId": "60d21b4667d0d8992e610c85",
+ *     "status": "processing",
+ *     "paymentStatus": "paid",
+ *     "amount": 9999,
+ *     "currency": "usd",
+ *     "paymentIntent": {
+ *       "id": "pi_3Nk...",
+ *       "status": "succeeded",
+ *       "amount": 9999,
+ *       "currency": "usd",
+ *       "created": "2023-01-01T12:00:00.000Z",
+ *       "paymentMethod": "card",
+ *       "receiptUrl": "https://pay.stripe.com/receipts/..."
+ *     }
+ *   }
+ * }
+ */
+router.get('/order/:orderId/status', protectRoute, getPaymentStatus);
 
 /**
  * @route   POST /api/payment/create-checkout-session
