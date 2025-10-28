@@ -41,6 +41,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import mongoose from 'mongoose';
+import { apiLimiter, paymentLimiter, securityHeaders, requestLogger } from './middleware/security.middleware.js';
 
 // Import route handlers
 import authRoutes from './routes/auth.route.js';
@@ -48,10 +49,12 @@ import socialAuthRoutes from './routes/socialAuth.route.js';
 import productRoutes from './routes/product.routes.js';
 import alertRoutes from './routes/alert.routes.js';
 import productAlertRoutes from './routes/product/alert.routes.js';
+import paymentMethodRoutes from './routes/payment-method.routes.js';
+import refundRoutes from './routes/refund.routes.js';
+import subscriptionRoutes from './routes/subscription.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import cartRoutes from './routes/cart.routes.js';
 import couponRoutes from './routes/coupon.routes.js';
-import paymentRoutes from './routes/payment.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
 import wishlistRoutes from './routes/wishlist.routes.js';
 import attributeRoutes from './routes/attribute.routes.js';
@@ -109,11 +112,25 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-// Middleware
+// Apply security middleware
+app.use(securityHeaders);
+app.use(requestLogger);
+
+// Apply CORS and body parsing
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
+
+// Apply rate limiting
+try {
+  app.use('/api/', apiLimiter);
+  app.use('/api/payments', paymentLimiter);
+  app.use('/api/payment-methods', paymentLimiter);
+  app.use('/api/refunds', paymentLimiter);
+} catch (error) {
+  console.error('Error applying rate limiting:', error);
+}
 
 // Session middleware
 app.use(sessionMiddleware);
@@ -186,14 +203,16 @@ app.delete('/api/products/bulk/delete',
   bulkDeleteProducts
 );
 
+// Payment related routes
+app.use('/api/payment-methods', paymentMethodRoutes);
+app.use('/api/refunds', refundRoutes);
+
 // Other routes 
 app.use('/api/cart', cartRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/wishlist', wishlistRoutes);
-app.use('/api/attributes', attributeRoutes);
-app.use('/api/reviews', reviewRoutes);
 
 // Category routes
 app.use('/api/categories', categoryRoutes);
@@ -205,12 +224,15 @@ app.use('/api/compare', comparisonRoutes);
 // Mount order routes
 app.use('/api/orders', orderRoutes);
 
+// Webhook endpoint (must be before bodyParser)
+import stripeWebhook from './webhooks/stripe.webhook.js';
+app.use('/webhooks/stripe', stripeWebhook);
+
 // Add catch-all route for debugging
 app.use('/api/*', (req, res, next) => {
   console.log('Catch-all route hit:', req.originalUrl);
   next(new Error('Endpoint not found'));
 });
-
 
 // Production static files
 if (process.env.NODE_ENV === 'production') {

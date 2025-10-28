@@ -119,6 +119,41 @@ const orderSchema = new mongoose.Schema(
       }
     },
     
+    /** @type {Array} Refunds for this order */
+    refunds: [{
+      refundId: {
+        type: String,
+        required: true,
+      },
+      amount: {
+        type: Number,
+        required: true,
+      },
+      currency: {
+        type: String,
+        default: 'usd',
+      },
+      reason: String,
+      status: {
+        type: String,
+        enum: ['pending', 'succeeded', 'failed', 'cancelled'],
+        default: 'pending',
+      },
+      metadata: {
+        type: Map,
+        of: String,
+      },
+      processedAt: {
+        type: Date,
+        default: Date.now,
+      },
+      processedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+      notes: String,
+    }],
+
     /** @type {string} Stripe session ID for payment */
     stripeSessionId: {
       type: String,

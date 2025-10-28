@@ -1,5 +1,5 @@
 import express from 'express';
-import { protectRoute } from '../middleware/auth.middleware.js';
+import { protectRoute, adminRoute } from '../middleware/auth.middleware.js';
 import { 
   createPaymentIntent,
   handleWebhook,
@@ -7,7 +7,14 @@ import {
   checkoutSuccess, 
   createCheckoutSession 
 } from '../controllers/payment.controller.js';
+import { 
+  validateCreatePaymentIntent, 
+  validateCheckoutSession,
+  validatePaymentStatus 
+} from '../middleware/payment.validator.js';
+import { validateRequest } from '../middleware/validate-request.js';
 import bodyParser from 'body-parser';
+import logger from '../utils/logger.js';
 
 /**
  * Payment Routes
@@ -47,7 +54,14 @@ const router = express.Router();
  *   "currency": "usd"
  * }
  */
-router.post('/create-payment-intent', protectRoute, createPaymentIntent);
+// Apply validation middleware to routes
+router.post(
+  '/create-payment-intent', 
+  protectRoute, 
+  validateCreatePaymentIntent,
+  validateRequest,
+  createPaymentIntent
+);
 
 /**
  * @route   POST /api/payments/webhook
@@ -59,8 +73,20 @@ router.post('/create-payment-intent', protectRoute, createPaymentIntent);
  * @note This endpoint should be configured in your Stripe Dashboard to receive events
  */
 router.post('/webhook', 
-  // Stripe needs the raw body to verify the webhook signature
   bodyParser.raw({ type: 'application/json' }), 
+  (req, res, next) => {
+    logger.info('Webhook received', {
+      type: req.headers['stripe-signature'] ? 'stripe' : 'unknown',
+      ip: req.ip,
+      method: req.method,
+      url: req.originalUrl,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'stripe-signature': req.headers['stripe-signature'] ? 'present' : 'missing'
+      }
+    });
+    next();
+  },
   handleWebhook
 );
 
@@ -98,7 +124,13 @@ router.post('/webhook',
  *   }
  * }
  */
-router.get('/order/:orderId/status', protectRoute, getPaymentStatus);
+router.get(
+  '/order/:orderId/status', 
+  protectRoute, 
+  validatePaymentStatus,
+  validateRequest,
+  getPaymentStatus
+);
 
 /**
  * @route   POST /api/payment/create-checkout-session
@@ -133,7 +165,13 @@ router.get('/order/:orderId/status', protectRoute, getPaymentStatus);
  *   "url": "https://checkout.stripe.com/pay/cs_test_..."
  * }
  */
-router.post('/create-checkout-session', protectRoute, createCheckoutSession);
+router.post(
+  '/checkout-session', 
+  protectRoute,
+  validateCheckoutSession,
+  validateRequest,
+  createCheckoutSession
+);
 
 /**
  * @route   POST /api/payment/checkout-success
@@ -174,6 +212,17 @@ router.post('/create-checkout-session', protectRoute, createCheckoutSession);
  *   "code": "SESSION_EXPIRED"
  * }
  */
-router.post('/checkout-success', protectRoute, checkoutSuccess);
+router.post(
+  '/checkout-success', 
+  protectRoute, 
+  (req, res, next) => {
+    logger.info('Checkout success', {
+      userId: req.user?._id,
+      body: req.body
+    });
+    next();
+  },
+  checkoutSuccess
+);
 
 export default router;
