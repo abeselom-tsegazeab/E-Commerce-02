@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import mongoosePaginate from 'mongoose-paginate-v2';
+import crypto from 'crypto';
 
 /**
  * @typedef {Object} OrderItem
@@ -34,14 +35,21 @@ const orderSchema = new mongoose.Schema(
     items: [{
       product: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Product",
-        required: [true, 'Product ID is required'],
+        ref: 'Product',
+        required: true,
         validate: {
           validator: function(v) {
             return mongoose.Types.ObjectId.isValid(v);
           },
           message: props => `${props.value} is not a valid product ID`
         }
+      },
+      name: { type: String, required: true },
+      image: { type: String },
+      variant: {
+        name: String,
+        value: String,
+        sku: String
       },
       quantity: {
         type: Number,
@@ -53,20 +61,6 @@ const orderSchema = new mongoose.Schema(
         required: [true, 'Price is required'],
         min: [0, 'Price cannot be negative']
       },
-      name: {
-        type: String,
-        required: [true, 'Product name is required']
-      },
-      image: {
-        type: String,
-        default: ''
-      },
-      variant: {
-        type: String,
-        default: ''
-      },
-      sku: String,
-      weight: Number,
       tax: {
         type: Number,
         default: 0
@@ -107,53 +101,11 @@ const orderSchema = new mongoose.Schema(
     }],
     
     /** @type {number} Total order amount */
-    totalAmount: {
-      type: Number,
-      required: [true, 'Total amount is required'],
-      min: [0, 'Total amount cannot be negative'],
-      default: function() {
-        // Calculate total from items if not provided
-        return this.items.reduce((total, item) => {
-          return total + (item.quantity * item.price) - (item.discount || 0);
-        }, 0);
-      }
-    },
+    itemsPrice: { type: Number, required: true, min: 0 },
+    shippingPrice: { type: Number, required: true, default: 0 },
+    taxPrice: { type: Number, required: true, default: 0 },
+    totalAmount: { type: Number, required: true, min: 0 },
     
-    /** @type {Array} Refunds for this order */
-    refunds: [{
-      refundId: {
-        type: String,
-        required: true,
-      },
-      amount: {
-        type: Number,
-        required: true,
-      },
-      currency: {
-        type: String,
-        default: 'usd',
-      },
-      reason: String,
-      status: {
-        type: String,
-        enum: ['pending', 'succeeded', 'failed', 'cancelled'],
-        default: 'pending',
-      },
-      metadata: {
-        type: Map,
-        of: String,
-      },
-      processedAt: {
-        type: Date,
-        default: Date.now,
-      },
-      processedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-      },
-      notes: String,
-    }],
-
     /** @type {string} Stripe session ID for payment */
     stripeSessionId: {
       type: String,
@@ -164,7 +116,7 @@ const orderSchema = new mongoose.Schema(
     /** @type {string} Order status */
     status: {
       type: String,
-      enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'],
+      enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'returned', 'refunded', 'partially_refunded'],
       default: 'pending',
       index: true
     },
@@ -178,6 +130,23 @@ const orderSchema = new mongoose.Schema(
     
     /** @type {Address} Shipping address */
     shippingAddress: {
+      paymentMethod: { 
+        type: String, 
+        required: true,
+        enum: ['stripe', 'paypal', 'cod', 'bank_transfer'],
+        default: 'stripe'
+      },
+      paymentStatus: {
+        type: String,
+        enum: ['pending', 'completed', 'failed', 'refunded', 'partially_refunded'],
+        default: 'pending'
+      },
+      paymentResult: {
+        id: String,
+        status: String,
+        update_time: String,
+        email_address: String,
+      },
       street: { type: String, required: true },
       city: { type: String, required: true },
       state: { type: String, required: true },
@@ -279,7 +248,14 @@ const orderSchema = new mongoose.Schema(
       }],
       returnDeadline: Date,
       remainingReturnWindowDays: Number
-    }]
+    }],
+    
+    /** @type {string} Order number */
+    orderNumber: {
+      type: String,
+      unique: true,
+      index: true
+    }
   },
   {
     timestamps: true,
@@ -299,7 +275,7 @@ orderSchema.pre('save', function(next) {
       name: item.name,
       image: item.image,
       variant: item.variant,
-      sku: item.sku,
+      sku: item.variant?.sku || null,
       weight: item.weight,
       tax: item.tax,
       discount: item.discount
@@ -331,8 +307,43 @@ orderSchema.virtual('productsArray', {
   foreignField: '_id'
 });
 
-// Add pagination plugin to the schema
+// Add pagination plugin
 orderSchema.plugin(mongoosePaginate);
+
+// Generate order number if not provided
+orderSchema.pre('save', function(next) {
+  if (!this.orderNumber) {
+    this.orderNumber = `ORD-${crypto.randomBytes(3).toString('hex').toUpperCase()}-${Date.now().toString().slice(-6)}`;
+  }
+  next();
+});
+
+// Update product stock when order is placed
+orderSchema.pre('save', async function(next) {
+  if (this.isNew) {
+    // Decrease product stock
+    const Product = mongoose.model('Product');
+    const bulkOps = this.items.map(item => ({
+      updateOne: {
+        filter: { _id: item.product, 'variants.sku': item.variant?.sku || null },
+        update: { 
+          $inc: { 
+            'countInStock': -item.quantity,
+            ...(item.variant?.sku && { 'variants.$[elem].quantity': -item.quantity })
+          } 
+        },
+        arrayFilters: item.variant?.sku ? [{ 'elem.sku': item.variant.sku }] : undefined
+      }
+    }));
+    
+    try {
+      await Product.bulkWrite(bulkOps);
+    } catch (error) {
+      return next(error);
+    }
+  }
+  next();
+});
 
 const Order = mongoose.model("Order", orderSchema);
 

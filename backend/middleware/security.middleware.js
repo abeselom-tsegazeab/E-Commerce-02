@@ -2,21 +2,29 @@ import rateLimit from 'express-rate-limit';
 import { RateLimitError } from '../errors/rate-limit-error.js';
 import { validationResult } from 'express-validator';
 import logger from '../utils/logger.js';
+import { ipKeyGenerator } from 'express-rate-limit';
 
 /**
  * Rate limiting middleware for API endpoints
  */
+// Helper function to generate cache key
+const generateKey = (req) => {
+  if (req.user) {
+    return `user_${req.user.id}`;
+  }
+  // Use the built-in ipKeyGenerator for proper IPv6 handling
+  return ipKeyGenerator(req, null);
+};
+
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  keyGenerator: generateKey,
   handler: (req, res, next, options) => {
     throw new RateLimitError('Too many requests, please try again later.');
-  },
-  keyGenerator: (req) => {
-    return req.user ? req.user.id : req.ip; // Use user ID if authenticated, otherwise IP
-  },
+  }
 });
 
 /**
@@ -25,8 +33,13 @@ export const apiLimiter = rateLimit({
 export const paymentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 30, // limit each IP to 30 requests per windowMs
-  message: 'Too many payment attempts, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: generateKey,
   skipSuccessfulRequests: true, // Only count failed requests
+  handler: (req, res, next, options) => {
+    throw new RateLimitError('Too many payment attempts, please try again later.');
+  }
 });
 
 /**

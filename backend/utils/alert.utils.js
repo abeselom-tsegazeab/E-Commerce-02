@@ -1,5 +1,6 @@
 import logger from './logger.js';
-import Notification from '../models/notification.model.js';
+
+// TODO: Implement notification system in the final stage
 
 /**
  * Send an alert for a failed payment (in-app notification)
@@ -7,46 +8,24 @@ import Notification from '../models/notification.model.js';
  * @returns {Promise<Object>} Created notification
  */
 export async function alertFailedPayment(paymentData) {
-  const { error, paymentIntent, orderId, customerEmail, userId } = paymentData;
+  const { error, paymentIntent, orderId } = paymentData;
   
-  const notificationData = {
-    type: 'payment_failed',
-    title: 'Payment Failed',
-    message: error?.message || 'Your payment could not be processed',
-    userId: userId, // User to receive the notification
-    data: {
-      orderId,
-      paymentIntentId: paymentIntent?.id,
-      amount: paymentIntent?.amount ? (paymentIntent.amount / 100).toFixed(2) : '0.00',
-      currency: paymentIntent?.currency?.toUpperCase() || 'USD',
-      error: {
-        message: error?.message,
-        code: error?.code,
-        type: error?.type,
-      },
+  // Just log the error for now
+  logger.error('Payment failed', {
+    orderId,
+    paymentIntentId: paymentIntent?.id,
+    error: {
+      message: error?.message,
+      code: error?.code,
+      type: error?.type,
     },
-    isRead: false,
-  };
-
-  try {
-    // Log the alert
-    logger.error('Payment failed alert', notificationData);
-    
-    // Create in-app notification
-    const notification = await Notification.create(notificationData);
-    
-    // Here you would typically emit a real-time event using Socket.io
-    // Example: io.to(userId).emit('notification', notification);
-    
-    return notification;
-  } catch (error) {
-    logger.error('Failed to create payment failure notification', {
-      error: error.message,
-      orderId,
-      paymentIntentId: paymentIntent?.id,
-    });
-    throw error;
-  }
+    amount: paymentIntent?.amount ? (paymentIntent.amount / 100).toFixed(2) : '0.00',
+    currency: paymentIntent?.currency?.toUpperCase() || 'USD',
+    timestamp: new Date().toISOString()
+  });
+  
+  // Return a simple response indicating the error was logged
+  return { logged: true, timestamp: new Date().toISOString() };
 }
 
 /**
@@ -55,40 +34,17 @@ export async function alertFailedPayment(paymentData) {
  * @returns {Promise<Object>} Created notification
  */
 export async function alertHighValueTransaction(paymentData) {
-  const { amount, currency, orderId, userId } = paymentData;
+  const { amount, currency, orderId } = paymentData;
   const amountInDollars = amount / 100;
   
   if (amountInDollars >= (parseFloat(process.env.HIGH_VALUE_THRESHOLD) || 1000)) {
-    const notificationData = {
-      type: 'high_value_transaction',
-      title: 'High Value Transaction',
-      message: `A high value transaction of ${amountInDollars.toFixed(2)} ${currency?.toUpperCase() || 'USD'} was processed`,
-      userId: userId,
-      data: {
-        orderId,
-        amount: amountInDollars,
-        currency: currency?.toUpperCase() || 'USD',
-      },
-      isRead: false,
-    };
-
-    try {
-      logger.warn('High value transaction', notificationData);
-      
-      // Create in-app notification
-      const notification = await Notification.create(notificationData);
-      
-      // Emit real-time event if needed
-      // io.to(userId).emit('notification', notification);
-      
-      return notification;
-    } catch (error) {
-      logger.error('Failed to create high value transaction notification', {
-        error: error.message,
-        orderId,
-      });
-      throw error;
-    }
+    logger.warn('High value transaction processed', {
+      orderId,
+      amount: amountInDollars,
+      currency: currency?.toUpperCase() || 'USD',
+      timestamp: new Date().toISOString()
+    });
+    return { logged: true, isHighValue: true, timestamp: new Date().toISOString() };
   }
-  return null;
+  return { logged: true, isHighValue: false };
 }
