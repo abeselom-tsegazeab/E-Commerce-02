@@ -1,16 +1,8 @@
-import { 
-  createContext, 
-  useContext, 
-  useState, 
-  useEffect, 
-  useCallback, 
-  useRef, 
-  useMemo 
-} from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api from '../utils/axiosConfig';
+import api, { apiService } from '../services/api.service';
+import { handleApiCall, formatErrorMessage } from '../utils/api.utils';
 import { toast } from 'react-toastify';
-import { getCookie, setCookie, deleteCookie, isAuthenticated } from '../utils/cookies';
 
 const AuthContext = createContext({
   user: null,
@@ -31,7 +23,7 @@ export const AuthProvider = ({ children }) => {
   const isMounted = useRef(true);
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   // Derived state for authentication status
   const isAuthenticated = useMemo(() => !!user, [user]);
 
@@ -55,349 +47,178 @@ export const AuthProvider = ({ children }) => {
   }, [error]);
 
   // Check authentication status
-  const checkAuth = useCallback(async (options = {}) => {
+  const checkAuth = useCallback(async () => {
     if (!isMounted.current) return null;
     
-    // Don't set loading on initial check to prevent flash of loading state
-    if (options.initialCheck !== true) {
-      setIsLoading(true);
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      if (isMounted.current) {
+        setIsLoading(false);
+      }
+      return null;
     }
     
     try {
-      const accessToken = localStorage.getItem('accessToken');
-      const isAuthenticated = localStorage.getItem('isAuthenticated');
-      
-      if (!accessToken || isAuthenticated !== 'true') {
-        console.log('No valid session found');
-        return null;
-      }
-
-      try {
-        const { data } = await api.get('/auth/me', { 
-          withCredentials: true,
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          },
-          // Don't retry on 401 to prevent infinite loops
-          validateStatus: status => status < 500
-        });
-
-        if (data?.user) {
-          console.log('User authenticated:', data.user);
-          setUser(data.user);
-          return data.user;
-        }
-      } catch (error) {
-        // If the token is invalid, clear it
-        if (error.response?.status === 401) {
-          console.log('Session expired or invalid, clearing auth data');
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('isAuthenticated');
-        }
-        throw error;
+      setIsLoading(true);
+      // Set the Authorization header before making the request
+      if (api && api.defaults && api.defaults.headers) {
+        api.defaults.headers.common = {
+          ...api.defaults.headers.common,
+          'Authorization': `Bearer ${token}`
+        };
       }
       
-      return null;
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      setUser(null);
+      const response = await handleApiCall(apiService.getCurrentUser());
+      const userData = response?.data || response;
+
+      if (isMounted.current) {
+        setUser(userData);
+      }
+      return userData;
+    } catch (err) {
+      if (isMounted.current) {
+        localStorage.removeItem('accessToken');
+        delete apiService.defaults.headers.common['Authorization'];
+        setUser(null);
+      }
       return null;
     } finally {
       if (isMounted.current) {
-        setLoading(false);
+        setIsLoading(false);
       }
     }
   }, []);
-  
-  // Check authentication status on initial load
-  useEffect(() => {
-    let isActive = true;
-    
-    const checkAuthOnMount = async () => {
-      try {
-        await checkAuth({ initialCheck: true });
-      } catch (error) {
-        console.error('Initial auth check failed:', error);
-      }
-    };
-    
-    if (isMounted.current) {
-      checkAuthOnMount();
-    }
-    
-    return () => {
-      isActive = false;
-    };
-  }, [checkAuth]);
 
   // Login function
-  const login = useCallback(async (credentials = {}) => {
-    console.log('AuthContext: Login function called with credentials:', credentials);
-    
-    // Store the current mounted state
-    const mounted = isMounted.current;
-    
+  const login = useCallback(async (email, password) => {
     try {
-      // Only update state if component is still mounted
-      if (mounted) {
-        setLoading(true);
-        setError(null);
+      if (!email || !password) {
+        throw new Error('Please provide both email and password');
       }
       
-      console.log('AuthContext: Sending login request to /auth/login');
-      const response = await api.post('/auth/login', credentials, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      console.log('AuthContext: Login response received:', response);
-
-      if (!response?.data) {
-        throw new Error('No data received from server');
-      }
-
-      if (response.data.success) {
-        const { user, accessToken } = response.data;
-        
-        if (!user) {
-          throw new Error('No user data received from server');
-        }
-        
-        console.log('AuthContext: Login successful, user data:', user);
-        
-        // Always update storage and state, but only update React state if mounted
-        if (accessToken) {
-          localStorage.setItem('accessToken', accessToken);
-          localStorage.setItem('isAuthenticated', 'true');
-          console.log('AuthContext: Access token stored');
-          
-          // Set the default authorization header for subsequent requests
-          api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
-        }
-        
-        // Update user state even if component unmounted during the request
-        // This ensures the user state is consistent across the app
-        setUser(user);
-        console.log('AuthContext: User state updated');
-        
-        // Only show toast if component is still mounted
-        if (mounted) {
-          toast.success('Login successful!');
-        }
-        
-        return user;
-      } else {
-        const errorMsg = response.data?.message || 'Login failed: Invalid response from server';
-        console.error('AuthContext: Login failed:', errorMsg);
-        throw new Error(errorMsg);
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      setUser(null);
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('accessToken');
+      setIsLoading(true);
+      setError(null);
       
-      const errorMessage = error.response?.data?.message || 
-                         error.message || 
-                         'Login failed. Please check your credentials and try again.';
+      // Ensure email is trimmed and in lowercase
+      const credentials = {
+        email: email.trim().toLowerCase(),
+        password: password
+      };
       
+      // Log the request for debugging
+      console.log('Sending login request with:', { email: credentials.email });
+      
+      // Make the login request
+      const response = await api.post('/auth/login', credentials);
+      const { accessToken, user: userData, message } = response.data || {};
+      
+      if (!accessToken || !userData) {
+        throw new Error(message || 'Invalid response from server');
+      }
+      
+      // Store the token and update the user state
+      localStorage.setItem('accessToken', accessToken);
+      
+      // Update the default Authorization header
+      if (api && api.defaults && api.defaults.headers) {
+        api.defaults.headers.common = {
+          ...api.defaults.headers.common,
+          'Authorization': `Bearer ${accessToken}`
+        };
+      }
+      
+      setUser(userData);
+      toast.success(message || 'Login successful!');
+      
+      // Redirect to the intended page or home
+      const redirectTo = location.state?.from?.pathname || '/';
+      navigate(redirectTo);
+      
+      return userData;
+    } catch (err) {
+      const errorMessage = formatErrorMessage(err);
       setError(errorMessage);
       toast.error(errorMessage);
-      throw error;
+      throw err;
     } finally {
-      // Only set loading to false if the component is still mounted
       if (isMounted.current) {
-        // Only set loading to false if we're not keeping it for redirect
-        setLoading(false);
+        setIsLoading(false);
       }
     }
-  }, []);
+  }, [navigate, location.state?.from?.pathname]);
 
   // Logout function
   const logout = useCallback(async () => {
-    if (!isMounted.current) return;
-    setLoading(true);
     try {
-      // Clear user state and storage first to ensure UI updates immediately
-      setUser(null);
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('isAuthenticated');
-      
-      // Then make the logout API call
-      await api.post('/auth/logout', {}, { 
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      console.log('Logout successful - client-side cleanup complete');
-      toast.success('Logged out successfully');
-      
-      // Clear any axios default headers
-      delete api.defaults.headers.common['Authorization'];
-      
-      return true; // Indicate success
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Even if the server logout fails, we still want to clear the local state
-      setUser(null);
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('isAuthenticated');
-      delete api.defaults.headers.common['Authorization'];
-      
-      const errorMsg = error.response?.data?.message || 'Error during logout';
-      console.error('Logout error details:', errorMsg);
-      toast.error(errorMsg);
-      
-      return false; // Indicate failure
+      await handleApiCall(apiService.logout());
+    } catch (err) {
+      console.error('Logout error:', err);
     } finally {
-      if (isMounted.current) {
-        setLoading(false);
-      }
+      localStorage.removeItem('accessToken');
+      setUser(null);
+      navigate('/login');
     }
-  }, []);
+  }, [navigate]);
 
   // Register function
   const register = useCallback(async (userData) => {
-    if (!isMounted.current) return null;
-    setLoading(true);
-    setError(null);
-
     try {
-      const response = await api.post('/auth/register', userData, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response?.data?.success) {
-        const { user, accessToken } = response.data;
-        
-        if (!user) {
-          throw new Error('No user data received from server');
-        }
-        
-        if (accessToken) {
-          localStorage.setItem('accessToken', accessToken);
-          localStorage.setItem('isAuthenticated', 'true');
-        }
-        
-        setUser(user);
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await handleApiCall(
+        apiService.register(userData)
+      );
+      
+      if (response.user) {
+        localStorage.setItem('accessToken', response.accessToken);
+        setUser(response.user);
         toast.success('Registration successful!');
-        return user;
+        navigate('/dashboard');
       }
-
-      throw new Error('Registration failed: No user data received');
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.';
+    } catch (err) {
+      const errorMessage = formatErrorMessage(err);
       setError(errorMessage);
       toast.error(errorMessage);
-      throw error;
+      throw err;
     } finally {
       if (isMounted.current) {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [navigate]);
 
   // Check authentication status on mount and when location changes
   useEffect(() => {
-    const checkAuthStatus = async () => {
-      try {
-        const hasAuthCookie = document.cookie.includes('token=') || 
-                            document.cookie.includes('connect.sid');
-        
-        if (hasAuthCookie) {
-          await checkAuth();
-        } else {
-          setIsLoading(false);
-        }
-      } catch (error) {
-        console.error('Error checking auth status:', error);
-        setIsLoading(false);
-      }
+    if (isMounted.current) {
+      checkAuth();
+    }
+    
+    return () => {
+      isMounted.current = false;
     };
-
-    checkAuthStatus();
   }, [checkAuth]);
 
-  // Define the context value
+  // Update user function
+  const updateUser = useCallback((userData) => {
+    setUser(prev => ({
+      ...prev,
+      ...userData
+    }));
+  }, []);
+
+  // Memoize the context value
   const contextValue = useMemo(() => ({
     user,
     isAuthenticated,
     isLoading,
     error,
-    login: async (credentials) => {
-      try {
-        setIsLoading(true);
-        const { data } = await api.post('/auth/login', credentials);
-        
-        if (data?.user) {
-          setUser(data.user);
-          localStorage.setItem('accessToken', data.accessToken);
-          localStorage.setItem('isAuthenticated', 'true');
-          toast.success('Login successful!');
-          return data.user;
-        }
-        
-        throw new Error('Login failed: No user data received');
-      } catch (error) {
-        const errorMessage = error.response?.data?.message || 'Login failed. Please check your credentials.';
-        setError(errorMessage);
-        toast.error(errorMessage);
-        throw error;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    logout: async () => {
-      try {
-        await api.post('/auth/logout');
-      } catch (error) {
-        console.error('Logout error:', error);
-      } finally {
-        setUser(null);
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('isAuthenticated');
-        setError(null);
-        navigate('/');
-      }
-    },
-    register: async (userData) => {
-      try {
-        setIsLoading(true);
-        const { data } = await api.post('/auth/register', userData);
-        
-        if (data?.user) {
-          setUser(data.user);
-          localStorage.setItem('accessToken', data.accessToken);
-          localStorage.setItem('isAuthenticated', 'true');
-          toast.success('Registration successful!');
-          return data.user;
-        }
-        
-        throw new Error('Registration failed: No user data received');
-      } catch (error) {
-        const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.';
-        setError(errorMessage);
-        toast.error(errorMessage);
-        throw error;
-      } finally {
-        setIsLoading(false);
-      }
-    },
+    login,
+    logout,
+    register,
     checkAuth,
-    updateUser: (userData) => {
-      setUser(prev => ({
-        ...prev,
-        ...userData
-      }));
-    }
-  }), [user, isAuthenticated, isLoading, error, checkAuth]);
+    updateUser
+  }), [user, isAuthenticated, isLoading, error, login, logout, register, checkAuth, updateUser]);
 
   return (
     <AuthContext.Provider value={contextValue}>

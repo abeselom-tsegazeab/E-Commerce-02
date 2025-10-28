@@ -13,6 +13,7 @@ const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 const ProfilePage = lazy(() => import('./pages/Profile'));
 const CategoryPage = lazy(() => import('./pages/CategoryPage'));
 const CartPage = lazy(() => import('./pages/CartPage'));
+const ShopPage = lazy(() => import('./pages/ShopPage.jsx'));
 const PurchaseSuccessPage = lazy(() => import('./pages/PurchaseSuccessPage'));
 const PurchaseCancelPage = lazy(() => import('./pages/PurchaseCancelPage'));
 const FAQPage = lazy(() => import('./pages/FAQPage'));
@@ -35,6 +36,7 @@ const AppRoutes = () => {
         <Routes location={location} key={location.pathname}>
           {/* Public Routes */}
           <Route path="/" element={<HomePage />} />
+          <Route path="/shop" element={<ShopPage />} />
           <Route path="/category/:category" element={<CategoryPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />

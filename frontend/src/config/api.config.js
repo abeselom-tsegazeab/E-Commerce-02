@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 export const apiConfig = {
   baseURL: API_BASE_URL,
@@ -13,7 +13,7 @@ export const endpoints = {
     login: '/auth/login',
     register: '/auth/register',
     logout: '/auth/logout',
-    refresh: '/auth/refresh',
+    refresh: '/auth/refresh-token',
     me: '/auth/me',
   },
   products: {

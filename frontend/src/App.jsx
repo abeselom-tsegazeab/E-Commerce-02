@@ -3,6 +3,19 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import 'react-toastify/dist/ReactToastify.css';
 import { ErrorBoundary } from 'react-error-boundary';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 30 * 60 * 1000,   // 30 minutes
+      refetchOnWindowFocus: false,
+      retry: 2,
+    },
+  },
+});
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -14,6 +27,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { NotificationProvider } from './admin/contexts/NotificationContext';
+import { CategoriesProvider } from './contexts/CategoriesContext';
+import { ProductsProvider } from './contexts/ProductsContext';
 
 // Initialize API configuration
 import './utils/axiosConfig';
@@ -79,7 +94,7 @@ const MainApp = () => (
       style={{ marginTop: '4.5rem' }}
       toastStyle={{
         borderRadius: '0.5rem',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
       }}
     />
   </div>
@@ -126,13 +141,15 @@ const AppContent = () => {
 const App = () => {
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <AuthProvider>
-        <CartProvider>
-          <NotificationProvider>
-            <AppContent />
-          </NotificationProvider>
-        </CartProvider>
-      </AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <CartProvider>
+            <NotificationProvider>
+              <AppContent />
+            </NotificationProvider>
+          </CartProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 };

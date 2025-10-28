@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { apiConfig } from '../config/api.config';
+import { apiConfig, endpoints } from '../config/api.config';
 
 // Create axios instance with base URL and default headers
 const api = axios.create({
@@ -30,27 +30,50 @@ api.interceptors.response.use(
 
     // If error is 401 and we haven't already tried to refresh
     if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const response = await axios.post(
-          `${apiConfig.baseURL}/auth/refresh`,
-          {},
-          { withCredentials: true }
-        );
-        
-        const { accessToken } = response.data;
-        localStorage.setItem('accessToken', accessToken);
-        
-        // Retry the original request with new token
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        return api(originalRequest);
-      } catch (error) {
-        // If refresh fails, redirect to login
+      // Don't retry refresh token request to avoid infinite loops
+      if (originalRequest.url.includes('refresh-token')) {
         localStorage.removeItem('accessToken');
         window.location.href = '/login';
         return Promise.reject(error);
       }
+
+      originalRequest._retry = true;
+
+      try {
+        const response = await axios.post(
+          `${apiConfig.baseURL}${endpoints.auth.refresh}`,
+          {},
+          { 
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        
+        const { accessToken } = response.data;
+        if (accessToken) {
+          localStorage.setItem('accessToken', accessToken);
+          // Update the default Authorization header
+          api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+          // Update the original request with the new token
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          return api(originalRequest);
+        }
+      } catch (error) {
+        console.error('Token refresh failed:', error);
+        localStorage.removeItem('accessToken');
+        delete api.defaults.headers.common['Authorization'];
+        window.location.href = '/login';
+        return Promise.reject(error);
+      }
+    }
+
+    // If we get a 401 and it's not a refresh request, redirect to login
+    if (error.response?.status === 401) {
+      localStorage.removeItem('accessToken');
+      delete api.defaults.headers.common['Authorization'];
+      window.location.href = '/login';
     }
 
     return Promise.reject(error);

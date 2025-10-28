@@ -63,7 +63,9 @@ const LoginPage = () => {
     
     try {
       console.log('Attempting to log in with email:', email);
-      const loginPromise = login({ email, password });
+      
+      // Pass email and password as separate parameters
+      const loginPromise = login(email, password);
       
       // Set a timeout to check if the promise is stuck
       const timeoutPromise = new Promise((_, reject) => {
