@@ -74,12 +74,49 @@ export const createProduct = async (req, res) => {
 // Get all products with filtering and pagination
 export const getAllProducts = async (req, res) => {
   try {
-    const { page = 1, limit = 10, sort = '-createdAt' } = req.query;
+    const { 
+      page = 1, 
+      limit = 10, 
+      sort = req.query.sortBy === 'price-lowest' ? 'price' : 
+            req.query.sortBy === 'price-highest' ? '-price' : 
+            req.query.sortBy === 'name-a' ? 'name' :
+            req.query.sortBy === 'name-z' ? '-name' :
+            '-createdAt' 
+    } = req.query;
     
     // Build query
     const query = {};
+    
+    // Handle category filter
     if (req.query.category) {
       query.category = req.query.category;
+    }
+    
+    // Handle price range filter (min and max)
+    if (req.query['priceRange[]']) {
+      const [min, max] = Array.isArray(req.query['priceRange[]']) 
+        ? req.query['priceRange[]'].map(Number) 
+        : [req.query.minPrice, req.query.maxPrice].map(Number);
+      
+      query.price = {};
+      if (!isNaN(min)) query.price.$gte = min;
+      if (!isNaN(max)) query.price.$lte = max;
+    }
+    
+    // Handle in-stock filter
+    if (req.query.inStock === 'true') {
+      query['variants.quantity'] = { $gt: 0 };
+    } else if (req.query.inStock === 'false') {
+      query.$or = [
+        { 'variants.quantity': { $lte: 0 } },
+        { 'variants.quantity': { $exists: false } }
+      ];
+    }
+    
+    // Handle rating filter
+    if (req.query.rating && !isNaN(Number(req.query.rating))) {
+      const minRating = Number(req.query.rating);
+      query.rating = { $gte: minRating };
     }
     
     // Execute query with pagination
@@ -565,6 +602,35 @@ export const updateProductVariants = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error updating product variants',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Get all active categories
+export const getAllCategories = async (req, res) => {
+  try {
+    const Category = mongoose.model('Category');
+    
+    // Find all active categories
+    const categories = await Category.find({
+      isActive: true
+    })
+    .select('name slug description image parent')
+    .sort('name')
+    .lean();
+    
+    res.status(200).json({
+      success: true,
+      count: categories.length,
+      data: categories
+    });
+    
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch categories',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

@@ -14,6 +14,7 @@ import {
   bulkUpdateProducts,
   getProductVariants,
   getProductsByIds,
+  getAllCategories,
   updateProductVariants
 } from '../controllers/product.controller.js';
 import { updateProductInventory } from '../controllers/product/stats.controller.js';
@@ -41,6 +42,7 @@ const router = express.Router({ mergeParams: true });
 
 // Public routes
 router.get('/', getAllProducts);
+router.get('/categories', getAllCategories);
 router.get('/search', validate(validateProductSearch), searchProducts);
 router.get('/featured', getFeaturedProducts);
 router.get('/:id', validate(getProductValidation), getProductById);

@@ -142,6 +142,7 @@ app.use(passport.session());
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', socialAuthRoutes);
+app.use('/api/products', productRoutes);
 
 // Add debug logging for all requests
 app.use((req, res, next) => {

@@ -46,40 +46,122 @@ export const ProductsProvider = ({ children }) => {
   });
 
   // Helper to update state
-  const updateState = (updates) => {
+  const updateState = useCallback((updates) => {
     setState(prev => ({
       ...prev,
       ...updates,
       error: null, // Clear previous errors on new actions
     }));
-  };
+  }, []);
 
   // Fetch all products with pagination, filtering, and sorting
   const fetchProducts = useCallback(async (page = 1, options = {}) => {
     try {
-      updateState({ loading: true });
+      // Only update loading state if we're not just updating filters
+      if (!options.skipLoading) {
+        updateState({ loading: true });
+      }
       
-      const { filters = state.filters, sortBy = state.sortBy } = options;
+      const { filters: newFilters = state.filters || {}, sortBy = state.sortBy || 'newest' } = options;
+      
+      console.log('Current filters:', newFilters);
+      
+      // Clean up filters - remove any undefined, null, or empty values
+      const cleanedFilters = {};
+      let hasActiveFilters = false;
+
+      Object.entries(newFilters).forEach(([key, value]) => {
+        // Skip empty arrays and objects
+        if (Array.isArray(value) && value.length === 0) return;
+        if (value === undefined || value === null || value === '') return;
+        
+        // Skip inStock: false to show all products by default
+        if (key === 'inStock' && value === false) return;
+        
+        // Handle price range filter
+        if (key === 'priceRange' && Array.isArray(value) && value.length === 2) {
+          const [minPrice, maxPrice] = value;
+          if (minPrice > 0 || maxPrice < 1000) { // Only consider it a filter if not default values
+            hasActiveFilters = true;
+            cleanedFilters.minPrice = minPrice;
+            cleanedFilters.maxPrice = maxPrice;
+          }
+          return;
+        }
+
+        // For other filters, check if they're non-default values
+        if (value !== false && value !== 0) {
+          hasActiveFilters = true;
+        }
+        cleanedFilters[key] = value;
+      });
+
+      // Map frontend sortBy to backend sort format
+      const sortMap = {
+        'price-lowest': 'price',
+        'price-highest': '-price',
+        'name-a': 'name',
+        'name-z': '-name',
+        'newest': '-createdAt',
+        'oldest': 'createdAt'
+      };
+      
+      const sort = sortMap[sortBy] || '-createdAt';
+      console.log('Sorting by:', sortBy, '->', sort);
+
       const params = {
         page,
-        limit: 12, // Default items per page
-        ...filters,
-        sort: sortBy,
+        limit: 12,
+        sort,
+        ...(hasActiveFilters && cleanedFilters) // Only spread filters if there are active ones
       };
 
-      const data = await handleApiCall(apiService.getProducts(params));
+      console.log('Final API params:', JSON.stringify(params, null, 2));
+      
+      let response;
+      if (hasActiveFilters) {
+        console.log('Using search endpoint with filters');
+        response = await apiService.searchProducts(params);
+      } else {
+        console.log('Using base products endpoint');
+        response = await apiService.getProducts(params);
+      }
+
+      const data = await handleApiCall(response);
+      
+      // Handle the response format where products are in data.docs
+      const products = data.docs || [];
+      const currentPage = data.page || 1;
+      const totalPages = data.totalPages || 1;
+      const totalItems = data.totalDocs || 0;
+      
+      console.log(`Found ${products.length} products`);
       
       updateState({
-        products: data.products,
-        currentPage: data.currentPage,
-        totalPages: data.totalPages,
-        totalItems: data.totalItems,
+        products,
+        currentPage,
+        totalPages,
+        totalItems,
         loading: false,
-        filters,
+        filters: newFilters, // Keep the original filters in state
         sortBy,
       });
       
-      return data;
+      return { products, currentPage, totalPages, totalItems };
+      } catch (apiError) {
+        console.error('API Error details:', {
+          message: apiError.message,
+          response: apiError.response?.data,
+          status: apiError.response?.status,
+          config: {
+            url: apiError.config?.url,
+            method: apiError.config?.method,
+            params: apiError.config?.params,
+            data: apiError.config?.data,
+          },
+        });
+        throw apiError;
+      }
     } catch (error) {
       const errorMessage = formatErrorMessage(error);
       updateState({ 
@@ -179,24 +261,45 @@ export const ProductsProvider = ({ children }) => {
     }
   }, []);
 
-  // Update filters
-  const updateFilters = useCallback((newFilters) => {
-    const filters = { ...state.filters, ...newFilters };
-    updateState({ 
-      filters,
-      currentPage: 1 // Reset to first page when filters change
-    });
+  // Update sort order
+  const updateSort = useCallback((sortBy) => {
+    setState(prev => ({
+      ...prev,
+      sortBy,
+      currentPage: 1
+    }));
     
-    // Automatically fetch products with new filters
-    fetchProducts(1, { filters });
+    // Fetch products with new sort
+    fetchProducts(1, { 
+      sortBy,
+      filters: state.filters,
+      skipLoading: true 
+    });
   }, [fetchProducts, state.filters]);
 
-  // Update sort
-  const updateSort = useCallback((sortBy) => {
-    updateState({ sortBy });
-    
-    // Automatically fetch products with new sort
-    fetchProducts(1, { sortBy });
+  // Update filters
+  const updateFilters = useCallback((newFilters) => {
+    setState(prev => {
+      // Merge new filters with existing ones
+      const mergedFilters = { 
+        ...prev.filters, 
+        ...newFilters 
+      };
+      
+      // Fetch products with new filters
+      fetchProducts(1, { 
+        filters: mergedFilters,
+        sortBy: prev.sortBy,
+        skipLoading: true 
+      });
+      
+      return {
+        ...prev,
+        filters: mergedFilters,
+        currentPage: 1,
+        loading: true
+      };
+    });
   }, [fetchProducts]);
 
   // Clear all filters
@@ -208,36 +311,36 @@ export const ProductsProvider = ({ children }) => {
       rating: 0,
     };
     
-    updateState({ 
+    setState(prev => ({
+      ...prev,
       filters: defaultFilters,
       sortBy: 'newest',
       searchQuery: '',
-      currentPage: 1
-    });
+      currentPage: 1,
+      loading: true
+    }));
     
     // Fetch products with default filters
     fetchProducts(1, { 
       filters: defaultFilters,
-      sortBy: 'newest' 
+      sortBy: 'newest',
+      skipLoading: true
     });
   }, [fetchProducts]);
-
-  // Memoize the context value
+  
+  // Memoize the context value - single source of truth
   const contextValue = useMemo(() => ({
-    // State
-    products: state.products,
-    featuredProducts: state.featuredProducts,
+    products: state.products || [],
+    featuredProducts: state.featuredProducts || [],
     product: state.product,
     loading: state.loading,
     error: state.error,
-    currentPage: state.currentPage,
-    totalPages: state.totalPages,
-    totalItems: state.totalItems,
-    filters: state.filters,
-    sortBy: state.sortBy,
-    searchQuery: state.searchQuery,
-    
-    // Actions
+    currentPage: state.currentPage || 1,
+    totalPages: state.totalPages || 1,
+    totalItems: state.totalItems || 0,
+    filters: state.filters || {},
+    sortBy: state.sortBy || 'newest',
+    searchQuery: state.searchQuery || '',
     fetchProducts,
     fetchProductById,
     fetchFeaturedProducts,

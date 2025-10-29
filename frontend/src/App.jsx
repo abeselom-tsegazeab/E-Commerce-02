@@ -144,9 +144,13 @@ const App = () => {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <CartProvider>
-            <NotificationProvider>
-              <AppContent />
-            </NotificationProvider>
+            <CategoriesProvider>
+              <ProductsProvider>
+                <NotificationProvider>
+                  <AppContent />
+                </NotificationProvider>
+              </ProductsProvider>
+            </CategoriesProvider>
           </CartProvider>
         </AuthProvider>
       </QueryClientProvider>

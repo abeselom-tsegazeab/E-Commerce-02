@@ -89,12 +89,12 @@ export const apiService = {
   getCurrentUser: () => api.get('/auth/me'),
 
   // Products
-  getProducts: (params = {}) => api.get('/products', { params }),
-  getProductById: (id) => api.get(`/products/${id}`),
-  createProduct: (productData) => api.post('/products', productData),
-  updateProduct: (id, productData) => api.put(`/products/${id}`, productData),
-  deleteProduct: (id) => api.delete(`/products/${id}`),
-  searchProducts: (query) => api.get('/products/search', { params: { q: query } }),
+  getProducts: (params = {}) => api.get(endpoints.products.getAll, { params }),
+  getProductById: (id) => api.get(endpoints.products.getById(id)),
+  createProduct: (productData) => api.post(endpoints.products.create, productData),
+  updateProduct: (id, productData) => api.put(endpoints.products.update(id), productData),
+  deleteProduct: (id) => api.delete(endpoints.products.delete(id)),
+  searchProducts: (query) => api.get(endpoints.products.search, { params: { q: query } }),
 
   // Orders
   createOrder: (orderData) => api.post('/orders', orderData),

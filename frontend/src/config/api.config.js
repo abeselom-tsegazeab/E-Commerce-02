@@ -1,4 +1,5 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+// Ensure the base URL doesn't end with a slash
+const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 
 export const apiConfig = {
   baseURL: API_BASE_URL,
@@ -17,12 +18,12 @@ export const endpoints = {
     me: '/auth/me',
   },
   products: {
-    getAll: '/products',
-    getById: (id) => `/products/${id}`,
-    create: '/products',
-    update: (id) => `/products/${id}`,
-    delete: (id) => `/products/${id}`,
-    search: '/products/search',
+    getAll: '/api/products',
+    getById: (id) => `/api/products/${id}`,
+    create: '/api/products',
+    update: (id) => `/api/products/${id}`,
+    delete: (id) => `/api/products/${id}`,
+    search: '/api/products/search',
   },
   orders: {
     create: '/orders',

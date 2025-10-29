@@ -29,8 +29,18 @@ const ProductList = () => {
 
   // Fetch products on component mount and when filters/sort change
   useEffect(() => {
-    fetchProducts(currentPage);
-  }, [fetchProducts, currentPage, filters]);
+    const fetchData = async () => {
+      try {
+        await fetchProducts(currentPage);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      }
+    };
+    
+    fetchData();
+    // We're not including fetchProducts in the dependency array to prevent infinite loops
+    // It's already memoized in the context
+  }, [currentPage, JSON.stringify(filters)]); // Using JSON.stringify for deep comparison of filters
 
   const handleSearch = (query) => {
     searchProducts(query);
